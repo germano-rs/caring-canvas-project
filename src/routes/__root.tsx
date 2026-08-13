@@ -6,8 +6,11 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useLocation,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { LayoutDashboard, Settings, Map as MapIcon } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -77,14 +80,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Monitor de Saúde - Curvelo/MG" },
+      { name: "description", content: "Dashboard de eventos de saúde com heatmap em Curvelo, Minas Gerais." },
+      { property: "og:title", content: "Monitor de Saúde - Curvelo/MG" },
+      { property: "og:description", content: "Dashboard de eventos de saúde com heatmap em Curvelo, Minas Gerais." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -102,9 +103,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <HeadContent />
+        <link
+          rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossOrigin=""
+        />
       </head>
       <body>
         {children}
@@ -116,11 +123,47 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <div className="flex min-h-screen bg-background">
+        {/* Navigation Sidebar */}
+        <nav className="w-16 md:w-64 border-r bg-card flex flex-col items-center md:items-stretch py-4">
+          <div className="px-4 mb-8 flex items-center gap-2 overflow-hidden">
+            <MapIcon className="w-8 h-8 text-primary shrink-0" />
+            <span className="font-bold text-xl hidden md:block truncate">Monitor Saúde</span>
+          </div>
+          
+          <div className="flex-1 px-2 space-y-2">
+            <Link
+              to="/"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                location.pathname === "/" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span className="hidden md:block">Dashboard</span>
+            </Link>
+            
+            <Link
+              to="/config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                location.pathname === "/config" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              <span className="hidden md:block">Configuração</span>
+            </Link>
+          </div>
+        </nav>
+
+        {/* Main Content */}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
+      <Toaster />
     </QueryClientProvider>
   );
 }
