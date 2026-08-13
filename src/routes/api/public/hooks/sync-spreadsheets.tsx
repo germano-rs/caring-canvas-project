@@ -11,11 +11,35 @@ export interface GeocodingResult {
 }
 
 async function queryNominatim(queryString: string): Promise<any> {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
-  });
-  return await response.json();
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function queryPhoton(queryString: string): Promise<any> {
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data && data.features && data.features.length > 0) {
+      const feat = data.features[0];
+      return [{
+        lat: feat.geometry.coordinates[1],
+        lon: feat.geometry.coordinates[0]
+      }];
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
@@ -27,7 +51,11 @@ async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = 
   tryQueries.push(`${cidade} - ${uf}, Brazil`);
 
   for (const query of tryQueries) {
-    const data = await queryNominatim(query);
+    let data = await queryNominatim(query);
+    if (!data || data.length === 0) {
+      data = await queryPhoton(query);
+    }
+    
     if (data && data.length > 0) {
       return {
         latitude: parseFloat(data[0].lat),
@@ -57,7 +85,11 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
       const fallbackResponse = await fetch(fallbackUrl, {
         headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
       });
-      const fallbackData = await fallbackResponse.json();
+      let fallbackData = await fallbackResponse.json();
+
+      if (!fallbackData || fallbackData.length === 0) {
+        fallbackData = await queryPhoton(cleanCEP);
+      }
 
       if (fallbackData && fallbackData.length > 0) {
         result = {
