@@ -21,7 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, FileSpreadsheet, MapPin, Calendar, AlertCircle } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -140,21 +139,10 @@ function EventsPage() {
                               No Mapa
                             </Badge>
                           ) : (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Badge variant="destructive" className="flex items-center gap-1">
-                                    <AlertCircle className="w-3 h-3" />
-                                    Erro Geo
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs text-xs">
-                                    Não foi possível encontrar as coordenadas para este endereço/CEP. Verifique se os dados estão corretos na planilha.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <Badge variant="destructive" className="flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Erro Geo
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
