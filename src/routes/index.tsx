@@ -16,8 +16,14 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const [config1, setConfig1] = useState<string>("all");
-  const [config2, setConfig2] = useState<string>("none");
   const [isComparisonMode, setIsComparisonMode] = useState(false);
+  const [start1, setStart1] = useState<string>("");
+  const [end1, setEnd1] = useState<string>("");
+  const [start2, setStart2] = useState<string>("");
+  const [end2, setEnd2] = useState<string>("");
+
+  const toStart = (d: string) => (d ? new Date(`${d}T00:00:00.000Z`).toISOString() : undefined);
+  const toEnd = (d: string) => (d ? new Date(`${d}T23:59:59.999Z`).toISOString() : undefined);
 
   const { data: configs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -25,20 +31,30 @@ function Dashboard() {
   });
 
   const { data: data1, isLoading: isLoading1, error: error1 } = useQuery({
-    queryKey: ["healthEvents", config1],
-    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1, undefined, undefined, true),
+    queryKey: ["healthEvents", config1, start1, end1],
+    queryFn: () =>
+      fetchEventsFromDb(config1 === "all" ? undefined : config1, toStart(start1), toEnd(end1), true),
     refetchInterval: 60000,
   });
 
-  const { data: data2, isLoading: isLoading2 } = useQuery({
-    queryKey: ["healthEvents", config2],
-    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2, undefined, undefined, true),
-    enabled: config2 !== "none",
+  const { data: data2 } = useQuery({
+    queryKey: ["healthEvents", config1, start2, end2, "compare"],
+    queryFn: () =>
+      fetchEventsFromDb(config1 === "all" ? undefined : config1, toStart(start2), toEnd(end2), true),
+    enabled: isComparisonMode,
   });
+
+  const formatRange = (s: string, e: string) => {
+    if (!s && !e) return "Todo o período";
+    const fmt = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR");
+    if (s && e) return `${fmt(s)} — ${fmt(e)}`;
+    return s ? `A partir de ${fmt(s)}` : `Até ${fmt(e)}`;
+  };
 
   const getHeatmapPoints = (events?: HealthData[]): [number, number, number][] => {
     return events ? events.map((item) => [item.latitude, item.longitude, 1] as [number, number, number]) : [];
   };
+
 
   if (isLoading1) {
     return (
