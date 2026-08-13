@@ -114,6 +114,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        console.log('SYNC ENDPOINT CALLED');
         const authHeader = request.headers.get('authorization');
         const token = authHeader?.replace('Bearer ', '');
 
