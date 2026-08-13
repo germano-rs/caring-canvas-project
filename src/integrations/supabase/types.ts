@@ -14,7 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      health_events: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          created_at: string | null
+          event_date: string
+          event_type: string | null
+          id: string
+          latitude: number
+          longitude: number
+          raw_data: Json
+          row_hash: string
+          rua: string | null
+          spreadsheet_id: string
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          created_at?: string | null
+          event_date: string
+          event_type?: string | null
+          id?: string
+          latitude: number
+          longitude: number
+          raw_data: Json
+          row_hash: string
+          rua?: string | null
+          spreadsheet_id: string
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          created_at?: string | null
+          event_date?: string
+          event_type?: string | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          raw_data?: Json
+          row_hash?: string
+          rua?: string | null
+          spreadsheet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_events_spreadsheet_id_fkey"
+            columns: ["spreadsheet_id"]
+            isOneToOne: false
+            referencedRelation: "spreadsheet_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spreadsheet_configs: {
+        Row: {
+          auto_geocode: boolean
+          column_mapping: Json
+          created_at: string | null
+          id: string
+          last_sync_at: string | null
+          name: string
+          updated_at: string | null
+          url: string
+        }
+        Insert: {
+          auto_geocode?: boolean
+          column_mapping?: Json
+          created_at?: string | null
+          id?: string
+          last_sync_at?: string | null
+          name: string
+          updated_at?: string | null
+          url: string
+        }
+        Update: {
+          auto_geocode?: boolean
+          column_mapping?: Json
+          created_at?: string | null
+          id?: string
+          last_sync_at?: string | null
+          name?: string
+          updated_at?: string | null
+          url?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
