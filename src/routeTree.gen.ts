@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfigRouteImport } from './routes/config'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as PanelsRouteImport } from './routes/panels'
 import { Route as ApiPublicHooksSyncSpreadsheetsRouteImport } from './routes/api/public/hooks/sync-spreadsheets'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const EventsRoute = EventsRouteImport.update({
   path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PanelsRoute = PanelsRouteImport.update({
+  id: '/panels',
+  path: '/panels',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksSyncSpreadsheetsRoute =
   ApiPublicHooksSyncSpreadsheetsRouteImport.update({
     id: '/api/public/hooks/sync-spreadsheets',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/config': typeof ConfigRoute
   '/events': typeof EventsRoute
+  '/panels': typeof PanelsRoute
   '/api/public/hooks/sync-spreadsheets': typeof ApiPublicHooksSyncSpreadsheetsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/config': typeof ConfigRoute
   '/events': typeof EventsRoute
+  '/panels': typeof PanelsRoute
   '/api/public/hooks/sync-spreadsheets': typeof ApiPublicHooksSyncSpreadsheetsRoute
 }
 export interface FileRoutesById {
@@ -53,18 +61,30 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/config': typeof ConfigRoute
   '/events': typeof EventsRoute
+  '/panels': typeof PanelsRoute
   '/api/public/hooks/sync-spreadsheets': typeof ApiPublicHooksSyncSpreadsheetsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/config' | '/events' | '/api/public/hooks/sync-spreadsheets'
+  fullPaths:
+    | '/'
+    | '/config'
+    | '/events'
+    | '/panels'
+    | '/api/public/hooks/sync-spreadsheets'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/config' | '/events' | '/api/public/hooks/sync-spreadsheets'
+  to:
+    | '/'
+    | '/config'
+    | '/events'
+    | '/panels'
+    | '/api/public/hooks/sync-spreadsheets'
   id:
     | '__root__'
     | '/'
     | '/config'
     | '/events'
+    | '/panels'
     | '/api/public/hooks/sync-spreadsheets'
   fileRoutesById: FileRoutesById
 }
@@ -72,6 +92,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConfigRoute: typeof ConfigRoute
   EventsRoute: typeof EventsRoute
+  PanelsRoute: typeof PanelsRoute
   ApiPublicHooksSyncSpreadsheetsRoute: typeof ApiPublicHooksSyncSpreadsheetsRoute
 }
 
@@ -98,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/panels': {
+      id: '/panels'
+      path: '/panels'
+      fullPath: '/panels'
+      preLoaderRoute: typeof PanelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/sync-spreadsheets': {
       id: '/api/public/hooks/sync-spreadsheets'
       path: '/api/public/hooks/sync-spreadsheets'
@@ -112,6 +140,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConfigRoute: ConfigRoute,
   EventsRoute: EventsRoute,
+  PanelsRoute: PanelsRoute,
   ApiPublicHooksSyncSpreadsheetsRoute: ApiPublicHooksSyncSpreadsheetsRoute,
 }
 export const routeTree = rootRouteImport

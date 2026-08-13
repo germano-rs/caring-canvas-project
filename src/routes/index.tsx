@@ -1,23 +1,40 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { fetchEventsFromDb, fetchSpreadsheetConfigs, type HealthData } from "@/lib/data-service";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchEventsFromDb, fetchSpreadsheetConfigs, savePanel, fetchSavedPanelById, type HealthData } from "@/lib/data-service";
 import { HealthMap } from "@/components/HealthMap";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout, Filter } from "lucide-react";
-import { useState } from "react";
+import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout, Filter, Save } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/DateInput";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { z } from "zod";
 
-
+const dashboardSearchSchema = z.object({
+  panelId: z.string().optional(),
+  readonly: z.string().optional(),
+});
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search) => dashboardSearchSchema.parse(search),
   component: Dashboard,
 });
 
 function Dashboard() {
+  const { panelId, readonly } = Route.useSearch();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isReadOnly = readonly === "true";
+  
+  const [panelName, setPanelName] = useState("");
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+
   const [config1, setConfig1] = useState<string>("all");
   const [isComparisonMode, setIsComparisonMode] = useState(false);
   // Draft (edited in inputs) vs applied (used in queries) filters
@@ -26,6 +43,69 @@ function Dashboard() {
   const [end1, setEnd1] = useState<string>("");
   const [start2, setStart2] = useState<string>("");
   const [end2, setEnd2] = useState<string>("");
+
+  // Load panel if panelId is present
+  const { data: panelData, isLoading: isLoadingPanel } = useQuery({
+    queryKey: ["savedPanel", panelId],
+    queryFn: () => fetchSavedPanelById(panelId as string),
+    enabled: !!panelId,
+  });
+
+  useEffect(() => {
+    if (panelData) {
+      const { config_id, is_comparison, filters, name } = panelData;
+      const f = filters as any;
+      setPanelName(name);
+      setIsComparisonMode(!!is_comparison);
+      setConfig1(config_id || "all");
+      setStart1(f?.start1 || "");
+      setEnd1(f?.end1 || "");
+      setStart2(f?.start2 || "");
+      setEnd2(f?.end2 || "");
+      setDraft({
+        config: config_id || "all",
+        start1: f?.start1 || "",
+        end1: f?.end1 || "",
+        start2: f?.start2 || "",
+        end2: f?.end2 || ""
+      });
+    }
+  }, [panelData]);
+
+  const saveMutation = useMutation({
+    mutationFn: savePanel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["savedPanels"] });
+      toast.success("Painel salvo com sucesso!");
+      setIsSaveModalOpen(false);
+    },
+    onError: () => {
+      toast.error("Erro ao salvar painel.");
+    }
+  });
+
+  const handleSavePanel = () => {
+    if (!panelName) {
+      toast.error("Por favor, insira um nome para o painel.");
+      return;
+    }
+    
+    const panelPayload: any = {
+      id: panelId, // Se já existir um panelId, ele faz update
+      name: panelName,
+      config_id: config1 === "all" ? null : config1,
+      is_comparison: isComparisonMode,
+      filters: {
+        start1,
+        end1,
+        start2,
+        end2
+      }
+    };
+    saveMutation.mutate(panelPayload);
+  };
+
+  const isDirty = config1 !== "all" || !!start1 || !!end1 || isComparisonMode || !!start2 || !!end2;
 
   const applyFilters = () => {
     setConfig1(draft.config);
@@ -75,7 +155,7 @@ function Dashboard() {
   };
 
 
-  if (isLoading1) {
+  if (isLoading1 || isLoadingPanel) {
     return (
       <div className="p-8 space-y-6">
         <Skeleton className="h-12 w-1/3" />
@@ -125,21 +205,25 @@ function Dashboard() {
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Monitor de Eventos de Saúde</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {panelId ? `Painel: ${panelName}` : "Monitor de Eventos de Saúde"}
+          </h1>
           <p className="text-muted-foreground">Monitoramento e comparação de planilhas de saúde em Curvelo/MG</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <Select value={draft.config} onValueChange={(v) => setDraft((d) => ({ ...d, config: v }))}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Selecionar Planilha" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as Planilhas</SelectItem>
-              {configs?.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {!isReadOnly && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Select value={draft.config} onValueChange={(v) => setDraft((d) => ({ ...d, config: v }))}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Selecionar Planilha" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Planilhas</SelectItem>
+                {configs?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data inicial</label>
@@ -166,10 +250,20 @@ function Dashboard() {
             <Columns className="w-4 h-4" />
             Comparar
           </Button>
-        </div>
+            <Button
+              onClick={() => setIsSaveModalOpen(true)}
+              disabled={!isDirty}
+              className="gap-2"
+              variant="outline"
+            >
+              <Save className="w-4 h-4" />
+              Salvar como Painel
+            </Button>
+          </div>
+        )}
       </header>
 
-      {isComparisonMode && (
+      {isComparisonMode && !isReadOnly && (
         <div className="bg-muted/50 p-4 rounded-lg flex flex-wrap items-end gap-4 border border-dashed">
           <span className="text-sm font-medium pb-2">Comparar com outro período (mesma planilha):</span>
           <div className="flex flex-col gap-1">
@@ -270,6 +364,37 @@ function Dashboard() {
           </Link>
         </div>
       )}
+
+      <Dialog open={isSaveModalOpen} onOpenChange={setIsSaveModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Salvar Painel</DialogTitle>
+            <DialogDescription>
+              Dê um nome para esta configuração de filtros e visualização.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome do Painel</Label>
+              <Input
+                id="name"
+                value={panelName}
+                onChange={(e) => setPanelName(e.target.value)}
+                placeholder="Ex: Dengue - Janeiro 2024"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSaveModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSavePanel} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

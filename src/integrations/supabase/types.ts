@@ -127,6 +127,44 @@ export type Database = {
           },
         ]
       }
+      saved_panels: {
+        Row: {
+          config_id: string | null
+          created_at: string | null
+          filters: Json
+          id: string
+          is_comparison: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          config_id?: string | null
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          is_comparison?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          config_id?: string | null
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          is_comparison?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_panels_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "spreadsheet_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spreadsheet_configs: {
         Row: {
           auto_geocode: boolean

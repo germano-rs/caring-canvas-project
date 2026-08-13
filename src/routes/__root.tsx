@@ -9,7 +9,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { LayoutDashboard, Settings, Map as MapIcon, Table as TableIcon } from "lucide-react";
+import { LayoutDashboard, Settings, Map as MapIcon, Table as TableIcon, Layout } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -164,6 +164,16 @@ function RootComponent() {
             >
               <TableIcon className="w-5 h-5" />
               <span className="hidden md:block">Registros</span>
+            </Link>
+
+            <Link
+              to="/panels"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                location.pathname === "/panels" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+              }`}
+            >
+              <Layout className="w-5 h-5" />
+              <span className="hidden md:block">Painéis</span>
             </Link>
           </div>
         </nav>

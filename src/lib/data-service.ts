@@ -140,4 +140,46 @@ export async function fetchJobHistory() {
   return data;
 }
 
+export async function fetchSavedPanels() {
+  const { data, error } = await supabase
+    .from("saved_panels")
+    .select("*, spreadsheet_configs(name)")
+    .order("created_at", { ascending: false });
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchSavedPanelById(id: string) {
+  const { data, error } = await supabase
+    .from("saved_panels")
+    .select("*, spreadsheet_configs(name)")
+    .eq("id", id)
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function savePanel(panel: any) {
+  const { data, error } = await supabase
+    .from("saved_panels")
+    .upsert(panel)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePanel(id: string) {
+  const { error } = await supabase
+    .from("saved_panels")
+    .delete()
+    .eq("id", id);
+  
+  if (error) throw error;
+}
+
+
 
