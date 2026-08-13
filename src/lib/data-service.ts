@@ -48,6 +48,10 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
     .from("health_events")
     .select("*");
   
+  if (mapOnly) {
+    query = query.or("latitude.neq.0,longitude.neq.0");
+  }
+  
   if (spreadsheetId) {
     query = query.eq("spreadsheet_id", spreadsheetId);
   }

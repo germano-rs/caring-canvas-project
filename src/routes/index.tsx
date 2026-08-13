@@ -26,13 +26,13 @@ function Dashboard() {
 
   const { data: data1, isLoading: isLoading1, error: error1 } = useQuery({
     queryKey: ["healthEvents", config1],
-    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1),
+    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1, undefined, undefined, true),
     refetchInterval: 60000,
   });
 
   const { data: data2, isLoading: isLoading2 } = useQuery({
     queryKey: ["healthEvents", config2],
-    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2),
+    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2, undefined, undefined, true),
     enabled: config2 !== "none",
   });
 
