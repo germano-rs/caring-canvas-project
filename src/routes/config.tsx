@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchSpreadsheetConfigs, saveSpreadsheetConfig, deleteSpreadsheetConfig, triggerManualSync } from "@/lib/data-service";
+import { fetchSpreadsheetConfigs, saveSpreadsheetConfig, deleteSpreadsheetConfig, triggerManualSync, fetchActiveJobs, fetchJobHistory } from "@/lib/data-service";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Save, AlertCircle, Loader2, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Save, AlertCircle, Loader2, Plus, Trash2, RefreshCw, History, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { geocodeByCEP, geocodeByAddress } from "@/lib/geocoding";
 
@@ -26,6 +27,21 @@ function ConfigPage() {
   const { data: configs, isLoading } = useQuery({
     queryKey: ["spreadsheetConfigs"],
     queryFn: fetchSpreadsheetConfigs,
+  });
+
+  const { data: activeJobs } = useQuery({
+    queryKey: ["activeJobs"],
+    queryFn: fetchActiveJobs,
+    refetchInterval: (query) => {
+      const jobs = query.state.data as any[];
+      return jobs && jobs.length > 0 ? 3000 : 10000;
+    }
+  });
+
+  const { data: jobHistory } = useQuery({
+    queryKey: ["jobHistory"],
+    queryFn: fetchJobHistory,
+    refetchInterval: 10000
   });
 
   const saveMutation = useMutation({
@@ -126,6 +142,34 @@ function ConfigPage() {
         </Button>
       </div>
 
+      {activeJobs && activeJobs.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            Sincronizações em Andamento
+          </h2>
+          <div className="grid grid-cols-1 gap-4">
+            {activeJobs.map((job: any) => (
+              <Card key={job.id} className="border-primary/20 bg-primary/5">
+                <CardContent className="pt-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="font-medium">{job.spreadsheet_configs?.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {job.processed_rows} de {job.total_rows} registros
+                    </div>
+                  </div>
+                  <Progress value={job.total_rows > 0 ? (job.processed_rows / job.total_rows) * 100 : 0} />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Iniciado em: {new Date(job.created_at).toLocaleTimeString()}</span>
+                    <span>Status: {job.status === 'running' ? 'Processando...' : 'Na fila'}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6">
         {configs?.map((config) => (
           <SpreadsheetConfigCard 
@@ -134,7 +178,7 @@ function ConfigPage() {
             onSave={(updated) => saveMutation.mutate(updated)}
             onDelete={() => deleteMutation.mutate(config.id)}
             onSync={() => handleSync(config.id)}
-            isSyncing={isSyncing === config.id}
+            isSyncing={isSyncing === config.id || !!activeJobs?.some((j: any) => j.spreadsheet_id === config.id)}
           />
         ))}
         
@@ -144,6 +188,52 @@ function ConfigPage() {
           </div>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Histórico de Sincronização
+            </CardTitle>
+            <CardDescription>Últimas 10 execuções do sistema</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {jobHistory?.map((job: any) => (
+              <div key={job.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-center gap-3">
+                  {job.status === 'completed' ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  ) : job.status === 'failed' ? (
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-yellow-500" />
+                  )}
+                  <div>
+                    <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(job.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold">
+                    {job.imported_rows} importados
+                  </div>
+                  {job.failed_rows > 0 && (
+                    <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(!jobHistory || jobHistory.length === 0) && (
+              <p className="text-center text-muted-foreground py-4">Nenhum histórico disponível.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
