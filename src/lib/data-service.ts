@@ -4,13 +4,13 @@ import { type Config } from "./config";
 export interface HealthData {
   id: string;
   spreadsheet_id: string;
-  cep: string;
-  rua: string;
-  bairro: string;
+  cep: string | null;
+  rua: string | null;
+  bairro: string | null;
   longitude: number;
   latitude: number;
   data: string;
-  evento?: string;
+  evento: string | null;
 }
 
 export async function fetchSpreadsheetConfigs() {
