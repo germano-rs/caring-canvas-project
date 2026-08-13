@@ -173,6 +173,8 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             const mapping = config.column_mapping;
             console.log(`Syncing ${config.name} with mapping:`, mapping);
             let addedCount = 0;
+            let skippedGeocodingCount = 0;
+            let invalidDataCount = 0;
 
             for (const row of parsed.data as any[]) {
               // Create a hash of the row to avoid duplicates
@@ -224,6 +226,36 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                     onConflict: 'spreadsheet_id,row_hash'
                   });
 
+                if (!insertError) {
+                  addedCount++;
+                } else {
+                  console.error('Insert error:', insertError);
+                }
+              } else {
+                if (config.auto_geocode && cep) {
+                  skippedGeocodingCount++;
+                } else {
+                  invalidDataCount++;
+                }
+                
+                // Still upsert records without coordinates so they appear in the table but not the map
+                const { error: insertError } = await supabase
+                  .from('health_events')
+                  .upsert({
+                    spreadsheet_id: config.id,
+                    cep: row[mapping.cep],
+                    rua: row[mapping.rua],
+                    bairro: row[mapping.bairro],
+                    latitude: isNaN(lat) ? 0 : lat,
+                    longitude: isNaN(lon) ? 0 : lon,
+                    event_date: new Date(row[mapping.data]).toString() !== 'Invalid Date' ? new Date(row[mapping.data]).toISOString() : new Date().toISOString(),
+                    event_type: mapping.evento ? row[mapping.evento] : null,
+                    raw_data: row,
+                    row_hash: rowHash
+                  }, {
+                    onConflict: 'spreadsheet_id,row_hash'
+                  });
+                  
                 if (!insertError) addedCount++;
               }
             }

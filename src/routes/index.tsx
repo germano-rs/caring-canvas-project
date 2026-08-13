@@ -26,13 +26,13 @@ function Dashboard() {
 
   const { data: data1, isLoading: isLoading1, error: error1 } = useQuery({
     queryKey: ["healthEvents", config1],
-    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1),
+    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1, undefined, undefined, true),
     refetchInterval: 60000,
   });
 
   const { data: data2, isLoading: isLoading2 } = useQuery({
     queryKey: ["healthEvents", config2],
-    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2),
+    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2, undefined, undefined, true),
     enabled: config2 !== "none",
   });
 
@@ -143,7 +143,12 @@ function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalEvents}</div>
-              <p className="text-xs text-muted-foreground">Histórico da seleção</p>
+              <p className="text-xs text-muted-foreground">
+                Histórico da seleção. Se este número for menor que o esperado, verifique o mapeamento das colunas e a geolocalização dos registros na tela de{" "}
+                <Link to="/events" className="underline hover:text-primary">
+                  Registros
+                </Link>.
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -202,7 +207,7 @@ function Dashboard() {
           <Info className="w-12 h-12 text-muted-foreground" />
           <h2 className="text-2xl font-bold">Nenhum dado encontrado</h2>
           <p className="text-muted-foreground text-center max-w-md">
-            Certifique-se de ter configurado as planilhas e que a sincronização automática tenha ocorrido.
+            Certifique-se de ter configurado as planilhas e que a sincronização automática tenha ocorrido. Caso a planilha tenha muitos itens e poucos apareçam, verifique se o mapeamento de colunas está correto (maiúsculas/minúsculas importam) e se os endereços são válidos para geolocalização.
           </p>
           <Link to="/config">
             <Button>Ir para Configurações</Button>
