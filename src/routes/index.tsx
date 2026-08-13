@@ -369,9 +369,11 @@ function Dashboard() {
       <Dialog open={isSaveModalOpen} onOpenChange={setIsSaveModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Salvar Painel</DialogTitle>
+            <DialogTitle>{panelId ? "Editar Painel" : "Salvar Painel"}</DialogTitle>
             <DialogDescription>
-              Dê um nome para esta configuração de filtros e visualização.
+              {panelId 
+                ? "Você pode atualizar o painel atual ou salvar como um novo." 
+                : "Dê um nome para esta configuração de filtros e visualização."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -389,8 +391,25 @@ function Dashboard() {
             <Button variant="outline" onClick={() => setIsSaveModalOpen(false)}>
               Cancelar
             </Button>
+            {panelId && (
+              <Button 
+                variant="secondary"
+                onClick={() => {
+                  const payload = {
+                    name: panelName + " (Cópia)",
+                    config_id: config1 === "all" ? null : config1,
+                    is_comparison: isComparisonMode,
+                    filters: { start1, end1, start2, end2 }
+                  };
+                  saveMutation.mutate(payload);
+                }}
+                disabled={saveMutation.isPending}
+              >
+                Salvar como Novo
+              </Button>
+            )}
             <Button onClick={handleSavePanel} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Salvando..." : "Salvar"}
+              {saveMutation.isPending ? "Salvando..." : (panelId ? "Salvar Alterações" : "Salvar")}
             </Button>
           </DialogFooter>
         </DialogContent>
