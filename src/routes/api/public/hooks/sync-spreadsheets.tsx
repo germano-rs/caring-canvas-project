@@ -170,6 +170,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             });
 
             const mapping = config.column_mapping;
+            console.log(`Syncing ${config.name} with mapping:`, mapping);
             let addedCount = 0;
 
             for (const row of parsed.data as any[]) {
@@ -180,6 +181,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               let lat = parseFloat(row[mapping.latitude]);
               let lon = parseFloat(row[mapping.longitude]);
               const cep = row[mapping.cep];
+              console.log(`Row:`, row, `CEP from mapping '${mapping.cep}':`, cep);
 
               // Auto-geocode if missing
               if (config.auto_geocode && (isNaN(lat) || isNaN(lon)) && cep) {
@@ -203,6 +205,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               }
 
               if (!isNaN(lat) && !isNaN(lon)) {
+                console.log(`Upserting row with lat: ${lat}, lon: ${lon}`);
                 const { error: insertError } = await supabase
                   .from('health_events')
                   .upsert({
