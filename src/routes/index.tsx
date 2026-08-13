@@ -262,7 +262,7 @@ function Dashboard() {
         )}
       </header>
 
-      {isComparisonMode && (
+      {isComparisonMode && !isReadOnly && (
         <div className="bg-muted/50 p-4 rounded-lg flex flex-wrap items-end gap-4 border border-dashed">
           <span className="text-sm font-medium pb-2">Comparar com outro período (mesma planilha):</span>
           <div className="flex flex-col gap-1">
