@@ -81,20 +81,29 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
   }));
 }
 
-export async function triggerManualSync(configId: string) {
-  // We can call the server route manually if needed, or just wait for the cron.
-  // For simplicity, let's just use the fetcher we already have in the route if we wanted to call it from client,
-  // but usually it's better to let the server route handle it.
+export async function triggerManualSync(configId?: string) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token || (import.meta.env as any)['VITE_SUPABASE_PUBLISHABLE_KEY'];
-  
-  const response = await fetch('/api/public/hooks/sync-spreadsheets', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    }
-  });
-  
-  return await response.json();
+
+  // The sync runs in time-boxed batches; keep calling until nothing is pending.
+  let last: any = null;
+  let totalAdded = 0;
+
+  for (let i = 0; i < 20; i++) {
+    const response = await fetch('/api/public/hooks/sync-spreadsheets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    last = await response.json();
+    totalAdded += (last?.results ?? []).reduce((sum: number, r: any) => sum + (r.added ?? 0), 0);
+
+    if (!last?.pending) break;
+  }
+
+  return { ...last, totalAdded };
 }
+
