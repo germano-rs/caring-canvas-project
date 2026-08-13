@@ -7,43 +7,69 @@ export interface GeocodingResult {
   rua?: string | null;
 }
 
-// Helper to query Nominatim
-export async function queryNominatim(queryString: string): Promise<any> {
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
-    });
-    if (!response.ok) throw new Error(`Nominatim error: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error("Nominatim query failed:", error);
-    return null;
+// Helper for exponential backoff sleep
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper to query Nominatim with rate limiting and exponential backoff
+export async function queryNominatim(queryString: string, retries = 3, backoff = 1000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+      });
+      
+      if (response.status === 429) { // Rate limit hit
+        console.warn(`Nominatim rate limit hit, retrying in ${backoff}ms...`);
+        await sleep(backoff);
+        backoff *= 2;
+        continue;
+      }
+
+      if (!response.ok) throw new Error(`Nominatim error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error(`Nominatim query failed (attempt ${i + 1}):`, error);
+      if (i === retries - 1) return null;
+      await sleep(backoff);
+      backoff *= 2;
+    }
   }
+  return null;
 }
 
-// Helper to query LocationIQ (Free tier requires API key, but we'll use it as a structure for future expansion or another open API)
-// For now, let's use a secondary open provider if available, or just make our generic search more robust.
-// Another option is searching via Google Maps if a key was provided, but here we prefer open ones.
-// Let's use OpenStreetMap's Photon API as a secondary fallback which is often faster/different index.
-export async function queryPhoton(queryString: string): Promise<any> {
-  try {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Photon error: ${response.status}`);
-    const data = await response.json();
-    if (data && data.features && data.features.length > 0) {
-      const feat = data.features[0];
-      return [{
-        lat: feat.geometry.coordinates[1],
-        lon: feat.geometry.coordinates[0]
-      }];
+// Helper to query Photon with rate limiting and exponential backoff
+export async function queryPhoton(queryString: string, retries = 3, backoff = 1000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
+      const response = await fetch(url);
+      
+      if (response.status === 429) { // Rate limit hit
+        console.warn(`Photon rate limit hit, retrying in ${backoff}ms...`);
+        await sleep(backoff);
+        backoff *= 2;
+        continue;
+      }
+
+      if (!response.ok) throw new Error(`Photon error: ${response.status}`);
+      const data = await response.json();
+      if (data && data.features && data.features.length > 0) {
+        const feat = data.features[0];
+        return [{
+          lat: feat.geometry.coordinates[1],
+          lon: feat.geometry.coordinates[0]
+        }];
+      }
+      return null;
+    } catch (error) {
+      console.error(`Photon query failed (attempt ${i + 1}):`, error);
+      if (i === retries - 1) return null;
+      await sleep(backoff);
+      backoff *= 2;
     }
-    return null;
-  } catch (error) {
-    console.error("Photon query failed:", error);
-    return null;
   }
+  return null;
 }
 
 export async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
