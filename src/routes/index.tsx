@@ -90,7 +90,7 @@ function Dashboard() {
       return;
     }
     
-    saveMutation.mutate({
+    const panelPayload: any = {
       id: panelId, // Se já existir um panelId, ele faz update
       name: panelName,
       config_id: config1 === "all" ? null : config1,
