@@ -306,16 +306,22 @@ function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="space-y-1">
+        <div className="space-y-1 flex-1 mr-4">
           <CardTitle>
-            <Input 
-              value={localConfig.name} 
-              onChange={(e) => setLocalConfig({...localConfig, name: e.target.value})}
-              className="font-bold text-lg border-none p-0 focus-visible:ring-0 h-auto"
+            <Label htmlFor={`name-${config.id}`} className="text-xs text-muted-foreground font-normal">
+              Nome da planilha
+            </Label>
+            <Input
+              id={`name-${config.id}`}
+              value={localConfig.name}
+              onChange={(e) => setLocalConfig({ ...localConfig, name: e.target.value })}
+              placeholder="Nome da planilha"
+              className="font-bold text-lg mt-1"
             />
           </CardTitle>
           <CardDescription>ID: {config.id} | Última Sincronização: {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}</CardDescription>
         </div>
+
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onSync} disabled={isSyncing}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
