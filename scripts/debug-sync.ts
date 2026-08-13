@@ -36,7 +36,19 @@ async function runSync() {
       const date = row[mapping.data];
       console.log(`Row CEP: ${cep}, Date: ${date} (using mapping cep: ${mapping.cep}, data: ${mapping.data})`);
       
-      // We won't actually insert here, just testing logic
+      const { error } = await supabase.from('spreadsheet_configs').update({
+        column_mapping: {
+          ...mapping,
+          cep: 'CEP',
+          data: 'Data',
+          rua: 'Rua',
+          bairro: 'Bairro',
+          evento: 'Notificação'
+        }
+      }).eq('id', config.id);
+      
+      if (!error) console.log('Successfully updated mapping in DB');
+      break;
     }
   }
 }
