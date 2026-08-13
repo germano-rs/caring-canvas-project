@@ -80,7 +80,7 @@ function Dashboard() {
             toast.error("Por favor, insira um nome para o painel.");
             return;
         }
-        saveMutation.mutate({
+        const panelPayload = {
             id: panelId, // Se já existir um panelId, ele faz update
             name: panelName,
             config_id: config1 === "all" ? null : config1,
@@ -91,7 +91,8 @@ function Dashboard() {
                 start2,
                 end2
             }
-        });
+        };
+        saveMutation.mutate(panelPayload);
     };
     const isDirty = config1 !== "all" || !!start1 || !!end1 || isComparisonMode || !!start2 || !!end2;
     const applyFilters = () => {
@@ -135,7 +136,7 @@ function Dashboard() {
     const getHeatmapPoints = (events) => {
         return events ? events.map((item) => [item.latitude, item.longitude, 1]) : [];
     };
-    if (isLoading1) {
+    if (isLoading1 || isLoadingPanel) {
         return (<div className="p-8 space-y-6">
         <Skeleton className="h-12 w-1/3"/>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
