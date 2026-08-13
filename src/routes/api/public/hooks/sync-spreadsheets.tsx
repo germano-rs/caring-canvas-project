@@ -146,6 +146,11 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
 
         for (const config of configs) {
           try {
+            if (!config.url || config.url.trim() === '') {
+              results.push({ name: config.name, status: 'skipped', reason: 'URL is empty' });
+              continue;
+            }
+
             // Convert Google Sheets URL to CSV
             let url = config.url;
             if (url.includes("docs.google.com/spreadsheets") && !url.includes("export=csv")) {
