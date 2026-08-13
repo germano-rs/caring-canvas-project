@@ -44,6 +44,67 @@ function Dashboard() {
   const [start2, setStart2] = useState<string>("");
   const [end2, setEnd2] = useState<string>("");
 
+  // Load panel if panelId is present
+  const { data: panelData, isLoading: isLoadingPanel } = useQuery({
+    queryKey: ["savedPanel", panelId],
+    queryFn: () => fetchSavedPanelById(panelId!),
+    enabled: !!panelId,
+  });
+
+  useEffect(() => {
+    if (panelData) {
+      const { config_id, is_comparison, filters, name } = panelData;
+      setPanelName(name);
+      setIsComparisonMode(is_comparison);
+      setConfig1(config_id || "all");
+      setStart1(filters.start1 || "");
+      setEnd1(filters.end1 || "");
+      setStart2(filters.start2 || "");
+      setEnd2(filters.end2 || "");
+      setDraft({
+        config: config_id || "all",
+        start1: filters.start1 || "",
+        end1: filters.end1 || "",
+        start2: filters.start2 || "",
+        end2: filters.end2 || ""
+      });
+    }
+  }, [panelData]);
+
+  const saveMutation = useMutation({
+    mutationFn: savePanel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["savedPanels"] });
+      toast.success("Painel salvo com sucesso!");
+      setIsSaveModalOpen(false);
+    },
+    onError: () => {
+      toast.error("Erro ao salvar painel.");
+    }
+  });
+
+  const handleSavePanel = () => {
+    if (!panelName) {
+      toast.error("Por favor, insira um nome para o painel.");
+      return;
+    }
+    
+    saveMutation.mutate({
+      id: panelId, // Se já existir um panelId, ele faz update
+      name: panelName,
+      config_id: config1 === "all" ? null : config1,
+      is_comparison: isComparisonMode,
+      filters: {
+        start1,
+        end1,
+        start2,
+        end2
+      }
+    });
+  };
+
+  const isDirty = config1 !== "all" || !!start1 || !!end1 || isComparisonMode || !!start2 || !!end2;
+
   const applyFilters = () => {
     setConfig1(draft.config);
     setStart1(draft.start1);
