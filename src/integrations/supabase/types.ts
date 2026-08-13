@@ -266,7 +266,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_job_progress: {
+        Args: { f_inc: number; i_inc: number; job_id: string; p_inc: number }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
