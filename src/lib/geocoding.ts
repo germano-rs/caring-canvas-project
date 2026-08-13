@@ -7,6 +7,37 @@ export interface GeocodingResult {
   rua?: string | null;
 }
 
+// Helper to query Nominatim
+export async function queryNominatim(queryString: string): Promise<any> {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+  });
+  return await response.json();
+}
+
+export async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
+  const tryQueries = [];
+  
+  if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
+  if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
+  if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
+  tryQueries.push(`${cidade} - ${uf}, Brazil`);
+
+  for (const query of tryQueries) {
+    const data = await queryNominatim(query);
+    if (data && data.length > 0) {
+      return {
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+        bairro: bairro || null,
+        rua: rua || null
+      };
+    }
+  }
+  return null;
+}
+
 export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null> {
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
@@ -32,45 +63,13 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
     const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
     const viaCepData = await viaCepResponse.json();
 
-    if (viaCepData.erro) return null;
+    if (!viaCepData || viaCepData.erro) return null;
 
     const { logradouro, bairro, localidade, uf } = viaCepData;
     
-    // Helper to query Nominatim
-    const queryNominatim = async (queryString: string) => {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
-      });
-      return await response.json();
-    };
+    let result = await geocodeByAddress(logradouro, bairro, localidade, uf);
 
-    const tryQueries = [
-      `${logradouro}, ${bairro}, ${localidade} - ${uf}, Brazil`,
-      `${logradouro}, ${localidade} - ${uf}, Brazil`,
-      `${bairro}, ${localidade} - ${uf}, Brazil`,
-      `${localidade} - ${uf}, Brazil`
-    ];
-
-    let result: GeocodingResult | null = null;
-
-    for (const query of tryQueries) {
-      const queryParts = query.split(',');
-      if (queryParts.length > 0 && queryParts[0] && !queryParts[0].trim()) continue;
-      
-      const data = await queryNominatim(query);
-      if (data && data.length > 0) {
-        result = {
-          latitude: parseFloat(data[0].lat),
-          longitude: parseFloat(data[0].lon),
-          bairro: (bairro as string) || null,
-          rua: (logradouro as string) || null
-        };
-        break;
-      }
-    }
-
-    // Fallback: search just by CEP
+    // Fallback: search just by CEP if address search failed
     if (!result) {
       const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
       const fallbackResponse = await fetch(fallbackUrl, {

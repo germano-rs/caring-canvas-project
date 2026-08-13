@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Save, AlertCircle, Loader2, Plus, Trash2, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { geocodeByCEP } from "@/lib/geocoding";
+import { geocodeByCEP, geocodeByAddress } from "@/lib/geocoding";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -18,6 +18,8 @@ export const Route = createFileRoute("/config")({
 function ConfigPage() {
   const queryClient = useQueryClient();
   const [testCep, setTestCep] = useState("");
+  const [testRua, setTestRua] = useState("");
+  const [testBairro, setTestBairro] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
@@ -77,19 +79,28 @@ function ConfigPage() {
   };
 
   const handleTestGeocoding = async () => {
-    if (!testCep) {
-      toast.error("Insira um CEP para testar");
+    if (!testCep && !testRua && !testBairro) {
+      toast.error("Insira ao menos um CEP, Rua ou Bairro para testar");
       return;
     }
     setIsTesting(true);
     try {
-      const result = await geocodeByCEP(testCep);
+      let result = null;
+      if (testCep) {
+        result = await geocodeByCEP(testCep);
+      }
+      
+      if (!result && (testRua || testBairro)) {
+        toast.info("CEP falhou ou não fornecido. Tentando por endereço...");
+        result = await geocodeByAddress(testRua, testBairro);
+      }
+
       if (result) {
         toast.success(
-          `Localizado: Lat ${result.latitude.toFixed(4)}, Lon ${result.longitude.toFixed(4)} (${result.bairro})`
+          `Localizado: Lat ${result.latitude.toFixed(4)}, Lon ${result.longitude.toFixed(4)} ${result.bairro ? `(${result.bairro})` : ""}`
         );
       } else {
-        toast.error("Não foi possível geolocalizar este CEP.");
+        toast.error("Não foi possível geolocalizar com os dados fornecidos.");
       }
     } catch (error) {
       toast.error("Erro ao testar geolocalização.");
@@ -136,27 +147,45 @@ function ConfigPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Utilitário de Teste de CEP</CardTitle>
+          <CardTitle>Utilitário de Teste de Geolocalização</CardTitle>
           <CardDescription>
-            Verifique se a geolocalização automática consegue encontrar as coordenadas para um CEP.
+            Verifique se a geolocalização automática consegue encontrar as coordenadas.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1 space-y-2">
-              <Input
-                placeholder="Ex: 35790-000"
-                value={testCep}
-                onChange={(e) => setTestCep(e.target.value)}
-              />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>CEP</Label>
+                <Input
+                  placeholder="Ex: 35790-000"
+                  value={testCep}
+                  onChange={(e) => setTestCep(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Rua (Opcional)</Label>
+                <Input
+                  placeholder="Ex: Rua Direita"
+                  value={testRua}
+                  onChange={(e) => setTestRua(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Bairro (Opcional)</Label>
+                <Input
+                  placeholder="Ex: Centro"
+                  value={testBairro}
+                  onChange={(e) => setTestBairro(e.target.value)}
+                />
+              </div>
             </div>
             <Button 
-              variant="outline" 
               onClick={handleTestGeocoding} 
               disabled={isTesting}
-              className="gap-2"
+              className="w-full gap-2"
             >
-              {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar CEP"}
+              {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar Geolocalização"}
             </Button>
           </div>
         </CardContent>

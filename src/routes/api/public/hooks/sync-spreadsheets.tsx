@@ -6,8 +6,38 @@ import { createHash } from 'crypto';
 export interface GeocodingResult {
   latitude: number;
   longitude: number;
-  bairro?: string;
-  rua?: string;
+  bairro?: string | null;
+  rua?: string | null;
+}
+
+async function queryNominatim(queryString: string): Promise<any> {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+  });
+  return await response.json();
+}
+
+async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
+  const tryQueries = [];
+  
+  if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
+  if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
+  if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
+  tryQueries.push(`${cidade} - ${uf}, Brazil`);
+
+  for (const query of tryQueries) {
+    const data = await queryNominatim(query);
+    if (data && data.length > 0) {
+      return {
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+        bairro: bairro || null,
+        rua: rua || null
+      };
+    }
+  }
+  return null;
 }
 
 async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> {
@@ -17,58 +47,29 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
   try {
     const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
     const viaCepData = await viaCepResponse.json();
-    if (viaCepData.erro) return null;
+    if (!viaCepData || viaCepData.erro) return null;
 
     const { logradouro, bairro, localidade, uf } = viaCepData;
-    
-    // Helper to query Nominatim
-    const queryNominatim = async (queryString: string) => {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
-      const response = await fetch(url, {
+    let result = await geocodeByAddress(logradouro, bairro, localidade, uf);
+
+    if (!result) {
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
+      const fallbackResponse = await fetch(fallbackUrl, {
         headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
       });
-      return await response.json();
-    };
+      const fallbackData = await fallbackResponse.json();
 
-    const tryQueries = [
-      `${logradouro}, ${bairro}, ${localidade} - ${uf}, Brazil`,
-      `${logradouro}, ${localidade} - ${uf}, Brazil`,
-      `${bairro}, ${localidade} - ${uf}, Brazil`,
-      `${localidade} - ${uf}, Brazil`
-    ];
-
-    for (const query of tryQueries) {
-      const queryParts = query.split(',');
-      if (queryParts.length > 0 && queryParts[0] && !queryParts[0].trim()) continue;
-      
-      const data = await queryNominatim(query);
-      if (data && data.length > 0) {
-        return {
-          latitude: parseFloat(data[0].lat),
-          longitude: parseFloat(data[0].lon),
-          bairro,
-          rua: logradouro
+      if (fallbackData && fallbackData.length > 0) {
+        result = {
+          latitude: parseFloat(fallbackData[0].lat),
+          longitude: parseFloat(fallbackData[0].lon),
+          bairro: bairro || null,
+          rua: logradouro || null
         };
       }
     }
 
-    // Fallback: search just by CEP
-    const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
-    const fallbackResponse = await fetch(fallbackUrl, {
-      headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
-    });
-    const fallbackData = await fallbackResponse.json();
-
-    if (fallbackData && fallbackData.length > 0) {
-      return {
-        latitude: parseFloat(fallbackData[0].lat),
-        longitude: parseFloat(fallbackData[0].lon),
-        bairro,
-        rua: logradouro
-      };
-    }
-
-    return null;
+    return result;
   } catch (error) {
     console.error("Geocoding error:", error);
     return null;
@@ -152,6 +153,18 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 if (geo) {
                   lat = geo.latitude;
                   lon = geo.longitude;
+                } else {
+                  // Final fallback: try geocoding by street/neighborhood names directly from the spreadsheet row if CEP failed
+                  const fallbackGeo = await geocodeByAddress(
+                    row[mapping.rua],
+                    row[mapping.bairro],
+                    "Curvelo", // Default city
+                    "MG"      // Default UF
+                  );
+                  if (fallbackGeo) {
+                    lat = fallbackGeo.latitude;
+                    lon = fallbackGeo.longitude;
+                  }
                 }
               }
 
