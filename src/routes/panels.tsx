@@ -114,7 +114,7 @@ function PanelsPage() {
                       <TableCell className="text-xs text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3 h-3" />
-                          {new Date(panel.created_at).toLocaleDateString('pt-BR')}
+                          {panel.created_at ? new Date(panel.created_at).toLocaleDateString('pt-BR') : '---'}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
