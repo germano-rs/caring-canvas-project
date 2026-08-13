@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEventsFromDb, fetchSpreadsheetConfigs } from "@/lib/data-service";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -20,7 +20,19 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FileSpreadsheet, MapPin, Calendar, AlertCircle } from "lucide-react";
+import { 
+  Search, 
+  FileSpreadsheet, 
+  MapPin, 
+  Calendar, 
+  AlertCircle, 
+  CheckCircle2, 
+  ChevronLeft, 
+  ChevronRight,
+  Filter,
+  ArrowUpDown
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -29,6 +41,9 @@ export const Route = createFileRoute("/events")({
 function EventsPage() {
   const [spreadsheetId, setSpreadsheetId] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const { data: configs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -40,30 +55,47 @@ function EventsPage() {
     queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId, undefined, undefined, false),
   });
 
-  const filteredEvents = events?.filter((event) => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (event.rua?.toLowerCase().includes(searchLower)) ||
-      (event.bairro?.toLowerCase().includes(searchLower)) ||
-      (event.cep?.toLowerCase().includes(searchLower)) ||
-      (event.evento?.toLowerCase().includes(searchLower))
-    );
-  }) || [];
+  const filteredEvents = useMemo(() => {
+    if (!events) return [];
+    
+    return events.filter((event) => {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        (event.rua?.toLowerCase().includes(searchLower)) ||
+        (event.bairro?.toLowerCase().includes(searchLower)) ||
+        (event.cep?.toLowerCase().includes(searchLower)) ||
+        (event.evento?.toLowerCase().includes(searchLower));
+
+      const hasGeo = event.latitude !== 0 && event.longitude !== 0;
+      const matchesStatus = 
+        statusFilter === "all" || 
+        (statusFilter === "consistent" && hasGeo) || 
+        (statusFilter === "inconsistent" && !hasGeo);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [events, searchTerm, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / itemsPerPage));
+  const paginatedEvents = filteredEvents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Lista de Registros</h1>
-          <p className="text-muted-foreground">Visualize todos os dados sincronizados, incluindo os que não puderam ser geolocalizados.</p>
+          <p className="text-muted-foreground">Visualize todos os dados, incluindo registros inconsistentes para correção.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={spreadsheetId} onValueChange={setSpreadsheetId}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filtrar por Planilha" />
+          <Select value={spreadsheetId} onValueChange={(val) => { setSpreadsheetId(val); setCurrentPage(1); }}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Planilha" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas as Planilhas</SelectItem>
+              <SelectItem value="all">Todas</SelectItem>
               {configs?.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
@@ -72,81 +104,115 @@ function EventsPage() {
         </div>
       </header>
 
-      <div className="flex items-center space-x-2 bg-background border rounded-md px-3 py-2 shadow-sm max-w-md">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por rua, bairro, CEP ou evento..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="border-0 focus-visible:ring-0 p-0 h-auto"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por rua, bairro, CEP..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="pl-9"
+          />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setCurrentPage(1); }}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Status</SelectItem>
+              <SelectItem value="consistent">Consistentes (No Mapa)</SelectItem>
+              <SelectItem value="inconsistent">Inconsistentes (Sem Coordenadas)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4" />
-            {filteredEvents.length} Registros Encontrados
-          </CardTitle>
+        <CardHeader className="pb-2 border-b">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-primary" />
+              {filteredEvents.length} Registros
+            </CardTitle>
+            <div className="text-xs text-muted-foreground">
+              Mostrando {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredEvents.length)}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-[150px]">Data</TableHead>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="w-[120px]">Data</TableHead>
                   <TableHead>Localização</TableHead>
-                  <TableHead>CEP</TableHead>
-                  <TableHead>Status Mapa</TableHead>
+                  <TableHead className="w-[100px]">CEP</TableHead>
+                  <TableHead className="w-[180px]">Coordenadas (Lat, Lon)</TableHead>
+                  <TableHead className="w-[120px]">Status</TableHead>
                   <TableHead>Evento</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">Carregando dados...</TableCell>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">Carregando dados...</TableCell>
                   </TableRow>
-                ) : filteredEvents.length === 0 ? (
+                ) : paginatedEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">Nenhum registro encontrado.</TableCell>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">Nenhum registro encontrado.</TableCell>
                   </TableRow>
                 ) : (
-                  filteredEvents.map((event) => {
+                  paginatedEvents.map((event) => {
                     const hasGeo = event.latitude !== 0 && event.longitude !== 0;
                     return (
-                      <TableRow key={event.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
+                      <TableRow key={event.id} className={!hasGeo ? "bg-destructive/5" : ""}>
+                        <TableCell className="font-medium whitespace-nowrap text-xs">
+                          <div className="flex items-center gap-1.5">
                             <Calendar className="w-3 h-3 text-muted-foreground" />
                             {new Date(event.data).toLocaleDateString('pt-BR')}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-0.5">
-                            <div className="font-medium text-sm">{event.rua || "Rua não informada"}</div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {event.bairro || "Bairro não informado"}
+                          <div className="space-y-0.5 max-w-[200px]">
+                            <div className="font-medium text-xs truncate">{event.rua || "N/I"}</div>
+                            <div className="text-[10px] text-muted-foreground flex items-center gap-1 truncate">
+                              <MapPin className="w-2.5 h-2.5" />
+                              {event.bairro || "N/I"}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="font-mono text-xs">{event.cep || "N/A"}</Badge>
+                          <code className="text-[10px] px-1.5 py-0.5 bg-muted rounded">{event.cep || "---"}</code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {hasGeo ? (
+                              <span>{event.latitude.toFixed(6)}, {event.longitude.toFixed(6)}</span>
+                            ) : (
+                              <span className="text-destructive font-bold">---, ---</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {hasGeo ? (
-                            <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">
-                              No Mapa
+                            <Badge variant="outline" className="text-[10px] h-5 bg-green-50 text-green-700 border-green-200 gap-1">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              Consistente
                             </Badge>
                           ) : (
-                            <Badge variant="destructive" className="flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              Erro Geo
+                            <Badge variant="destructive" className="text-[10px] h-5 gap-1">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              Inconsistente
                             </Badge>
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{event.evento || "Saúde"}</Badge>
+                          <Badge variant="secondary" className="text-[10px] h-5 max-w-[100px] truncate">
+                            {event.evento || "Geral"}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     );
@@ -157,6 +223,33 @@ function EventsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-2">
+          <div className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Próximo <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
