@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 export interface GeocodingResult {
   latitude: number;
   longitude: number;
-  bairro?: string;
-  rua?: string;
+  bairro?: string | null;
+  rua?: string | null;
 }
 
 export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null> {
@@ -23,8 +23,8 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
       return {
         latitude: cached.latitude,
         longitude: cached.longitude,
-        bairro: cached.bairro || undefined,
-        rua: cached.rua || undefined
+        bairro: cached.bairro,
+        rua: cached.rua
       };
     }
 
@@ -63,8 +63,8 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
         result = {
           latitude: parseFloat(data[0].lat),
           longitude: parseFloat(data[0].lon),
-          bairro,
-          rua: logradouro
+          bairro: (bairro as string) || null,
+          rua: (logradouro as string) || null
         };
         break;
       }
@@ -82,8 +82,8 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
         result = {
           latitude: parseFloat(fallbackData[0].lat),
           longitude: parseFloat(fallbackData[0].lon),
-          bairro,
-          rua: logradouro
+          bairro: (bairro as string) || null,
+          rua: (logradouro as string) || null
         };
       }
     }
