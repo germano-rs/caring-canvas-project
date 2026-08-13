@@ -10,6 +10,8 @@ export interface GeocodingResult {
   rua?: string | null;
 }
 
+const TIME_BUDGET_MS = 45000;
+
 async function queryNominatim(queryString: string): Promise<any> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
@@ -43,19 +45,18 @@ async function queryPhoton(queryString: string): Promise<any> {
 }
 
 async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
-  const tryQueries = [];
-  
+  const tryQueries: string[] = [];
+
   if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
   if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
   if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
-  tryQueries.push(`${cidade} - ${uf}, Brazil`);
 
   for (const query of tryQueries) {
     let data = await queryNominatim(query);
     if (!data || data.length === 0) {
       data = await queryPhoton(query);
     }
-    
+
     if (data && data.length > 0) {
       return {
         latitude: parseFloat(data[0].lat),
@@ -108,51 +109,55 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
   }
 }
 
+function parseEventDate(value: any): string {
+  if (!value) return new Date().toISOString();
+  const str = String(value).trim();
+  const br = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (br) {
+    const d = new Date(Date.UTC(Number(br[3]), Number(br[2]) - 1, Number(br[1])));
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
 
 // Server-side route for syncing spreadsheets
 export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        console.log('SYNC ENDPOINT CALLED');
+        const startedAt = Date.now();
         const authHeader = request.headers.get('authorization');
         const token = authHeader?.replace('Bearer ', '');
 
-        // Use service role key if available for system sync, otherwise fallback to provided token or anon key
         const supabaseUrl = process.env['VITE_SUPABASE_URL']!;
         const supabaseKey = process.env['SUPABASE_SERVICE_ROLE_KEY'] || token || process.env['VITE_SUPABASE_ANON_KEY']!;
 
-        const supabase = createClient(
-          supabaseUrl,
-          supabaseKey,
-          {
-            auth: {
-              autoRefreshToken: false,
-              persistSession: false
-            }
-          }
-        );
+        const supabase = createClient(supabaseUrl, supabaseKey, {
+          auth: { autoRefreshToken: false, persistSession: false }
+        });
 
-        // 1. Fetch all spreadsheet configs
         const { data: configs, error: configError } = await supabase
           .from('spreadsheet_configs')
           .select('*');
 
         if (configError) {
-          console.error('Error fetching configs:', configError);
           return new Response(JSON.stringify({ error: configError.message }), { status: 500 });
         }
 
-        const results = [];
+        // In-memory geocoding cache for this run
+        const cepCache = new Map<string, GeocodingResult | null>();
 
-        for (const config of configs) {
+        const results: any[] = [];
+        let pendingGlobal = 0;
+
+        for (const config of configs ?? []) {
           try {
             if (!config.url || config.url.trim() === '') {
               results.push({ name: config.name, status: 'skipped', reason: 'URL is empty' });
               continue;
             }
 
-            // Convert Google Sheets URL to CSV
             let url = config.url;
             if (url.includes("docs.google.com/spreadsheets") && !url.includes("export=csv")) {
               const match = url.match(/\/d\/([^\/]+)/);
@@ -161,102 +166,106 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               }
             }
 
-            // Fetch CSV
             const csvResponse = await fetch(url);
             const csvText = await csvResponse.text();
 
-            const parsed = Papa.parse(csvText, {
-              header: true,
-              skipEmptyLines: true,
-            });
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            const rows = parsed.data as any[];
+            const mapping = config.column_mapping as any;
 
-            const mapping = config.column_mapping;
-            console.log(`Syncing ${config.name} with mapping:`, mapping);
+            // Load already-imported row hashes so re-runs resume instead of restarting
+            const existing = new Set<string>();
+            for (let from = 0; ; from += 1000) {
+              const { data: page } = await supabase
+                .from('health_events')
+                .select('row_hash')
+                .eq('spreadsheet_id', config.id)
+                .range(from, from + 999);
+              if (!page || page.length === 0) break;
+              page.forEach((r: any) => existing.add(r.row_hash));
+              if (page.length < 1000) break;
+            }
+
             let addedCount = 0;
-            let skippedGeocodingCount = 0;
-            let invalidDataCount = 0;
+            let pending = 0;
+            let timedOut = false;
 
-            for (const row of parsed.data as any[]) {
-              // Create a hash of the row to avoid duplicates
-              const rowString = JSON.stringify(row);
-              const rowHash = createHash('md5').update(rowString).digest('hex');
+            for (const row of rows) {
+              const rowHash = createHash('md5').update(JSON.stringify(row)).digest('hex');
+              if (existing.has(rowHash)) continue;
+
+              if (Date.now() - startedAt > TIME_BUDGET_MS) {
+                timedOut = true;
+                pending++;
+                continue;
+              }
 
               let lat = parseFloat(row[mapping.latitude]);
               let lon = parseFloat(row[mapping.longitude]);
               const cep = row[mapping.cep];
-              console.log(`Row:`, row, `CEP from mapping '${mapping.cep}':`, cep);
+              const cleanCEP = cep ? String(cep).replace(/\D/g, '') : '';
 
-              // Auto-geocode if missing
-              if (config.auto_geocode && (isNaN(lat) || isNaN(lon)) && cep) {
-                const geo = await serverGeocodeByCEP(cep);
+              if (config.auto_geocode && (isNaN(lat) || isNaN(lon))) {
+                let geo: GeocodingResult | null = null;
+
+                if (cleanCEP.length === 8) {
+                  if (cepCache.has(cleanCEP)) {
+                    geo = cepCache.get(cleanCEP)!;
+                  } else {
+                    const { data: cached } = await supabase
+                      .from('geocoding_cache')
+                      .select('latitude, longitude')
+                      .eq('cep', cleanCEP)
+                      .maybeSingle();
+
+                    if (cached) {
+                      geo = { latitude: cached.latitude, longitude: cached.longitude };
+                    } else {
+                      geo = await serverGeocodeByCEP(cleanCEP);
+                      if (geo) {
+                        await supabase.from('geocoding_cache').upsert({
+                          cep: cleanCEP,
+                          latitude: geo.latitude,
+                          longitude: geo.longitude,
+                          bairro: geo.bairro ?? null,
+                          rua: geo.rua ?? null
+                        }, { onConflict: 'cep' });
+                      }
+                    }
+                    cepCache.set(cleanCEP, geo);
+                  }
+                }
+
+                if (!geo) {
+                  geo = await geocodeByAddress(row[mapping.rua], row[mapping.bairro], "Curvelo", "MG");
+                }
+
                 if (geo) {
                   lat = geo.latitude;
                   lon = geo.longitude;
-                } else {
-                  // Final fallback: try geocoding by street/neighborhood names directly from the spreadsheet row if CEP failed
-                  const fallbackGeo = await geocodeByAddress(
-                    row[mapping.rua],
-                    row[mapping.bairro],
-                    "Curvelo", // Default city
-                    "MG"      // Default UF
-                  );
-                  if (fallbackGeo) {
-                    lat = fallbackGeo.latitude;
-                    lon = fallbackGeo.longitude;
-                  }
                 }
               }
 
-              if (!isNaN(lat) && !isNaN(lon)) {
-                console.log(`Upserting row with lat: ${lat}, lon: ${lon}`);
-                const { error: insertError } = await supabase
-                  .from('health_events')
-                  .upsert({
-                    spreadsheet_id: config.id,
-                    cep: row[mapping.cep],
-                    rua: row[mapping.rua],
-                    bairro: row[mapping.bairro],
-                    latitude: lat,
-                    longitude: lon,
-                    event_date: new Date(row[mapping.data]).toISOString(),
-                    event_type: mapping.evento ? row[mapping.evento] : null,
-                    raw_data: row,
-                    row_hash: rowHash
-                  }, {
-                    onConflict: 'spreadsheet_id,row_hash'
-                  });
+              const { error: insertError } = await supabase
+                .from('health_events')
+                .upsert({
+                  spreadsheet_id: config.id,
+                  cep: row[mapping.cep],
+                  rua: row[mapping.rua],
+                  bairro: row[mapping.bairro],
+                  latitude: isNaN(lat) ? 0 : lat,
+                  longitude: isNaN(lon) ? 0 : lon,
+                  event_date: parseEventDate(row[mapping.data]),
+                  event_type: mapping.evento ? row[mapping.evento] : null,
+                  raw_data: row,
+                  row_hash: rowHash
+                }, { onConflict: 'spreadsheet_id,row_hash' });
 
-                if (!insertError) {
-                  addedCount++;
-                } else {
-                  console.error('Insert error:', insertError);
-                }
+              if (!insertError) {
+                addedCount++;
+                existing.add(rowHash);
               } else {
-                if (config.auto_geocode && cep) {
-                  skippedGeocodingCount++;
-                } else {
-                  invalidDataCount++;
-                }
-                
-                // Still upsert records without coordinates so they appear in the table but not the map
-                const { error: insertError } = await supabase
-                  .from('health_events')
-                  .upsert({
-                    spreadsheet_id: config.id,
-                    cep: row[mapping.cep],
-                    rua: row[mapping.rua],
-                    bairro: row[mapping.bairro],
-                    latitude: isNaN(lat) ? 0 : lat,
-                    longitude: isNaN(lon) ? 0 : lon,
-                    event_date: new Date(row[mapping.data]).toString() !== 'Invalid Date' ? new Date(row[mapping.data]).toISOString() : new Date().toISOString(),
-                    event_type: mapping.evento ? row[mapping.evento] : null,
-                    raw_data: row,
-                    row_hash: rowHash
-                  }, {
-                    onConflict: 'spreadsheet_id,row_hash'
-                  });
-                  
-                if (!insertError) addedCount++;
+                console.error('Insert error:', insertError);
               }
             }
 
@@ -265,14 +274,21 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               .update({ last_sync_at: new Date().toISOString() })
               .eq('id', config.id);
 
-            results.push({ name: config.name, added: addedCount });
+            pendingGlobal += pending;
+            results.push({
+              name: config.name,
+              totalRows: rows.length,
+              added: addedCount,
+              pending,
+              incomplete: timedOut
+            });
           } catch (e) {
             console.error(`Error processing spreadsheet ${config.name}:`, e);
             results.push({ name: config.name, error: String(e) });
           }
         }
 
-        return new Response(JSON.stringify({ success: true, results }), {
+        return new Response(JSON.stringify({ success: true, pending: pendingGlobal, results }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
