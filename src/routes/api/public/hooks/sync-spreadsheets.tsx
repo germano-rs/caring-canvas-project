@@ -63,8 +63,8 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
         result = {
           latitude: parseFloat(fallbackData[0].lat),
           longitude: parseFloat(fallbackData[0].lon),
-          bairro,
-          rua: logradouro
+          bairro: bairro || null,
+          rua: logradouro || null
         };
       }
     }
