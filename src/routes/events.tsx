@@ -20,7 +20,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FileSpreadsheet, MapPin, Calendar } from "lucide-react";
+import { Search, FileSpreadsheet, MapPin, Calendar, AlertCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -36,8 +37,8 @@ function EventsPage() {
   });
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["healthEvents", spreadsheetId],
-    queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId),
+    queryKey: ["healthEvents", spreadsheetId, "all"],
+    queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId, undefined, undefined, false),
   });
 
   const filteredEvents = events?.filter((event) => {
@@ -55,7 +56,7 @@ function EventsPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Lista de Registros</h1>
-          <p className="text-muted-foreground">Visualize todos os dados sincronizados das suas planilhas</p>
+          <p className="text-muted-foreground">Visualize todos os dados sincronizados, incluindo os que não puderam ser geolocalizados.</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={spreadsheetId} onValueChange={setSpreadsheetId}>
@@ -97,7 +98,7 @@ function EventsPage() {
                   <TableHead className="w-[150px]">Data</TableHead>
                   <TableHead>Localização</TableHead>
                   <TableHead>CEP</TableHead>
-                  <TableHead>Coordenadas</TableHead>
+                  <TableHead>Status Mapa</TableHead>
                   <TableHead>Evento</TableHead>
                 </TableRow>
               </TableHeader>
@@ -111,34 +112,57 @@ function EventsPage() {
                     <TableCell colSpan={5} className="text-center py-8">Nenhum registro encontrado.</TableCell>
                   </TableRow>
                 ) : (
-                  filteredEvents.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3 h-3 text-muted-foreground" />
-                          {new Date(event.data).toLocaleDateString('pt-BR')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <div className="font-medium text-sm">{event.rua || "Rua não informada"}</div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {event.bairro || "Bairro não informado"}
+                  filteredEvents.map((event) => {
+                    const hasGeo = event.latitude !== 0 && event.longitude !== 0;
+                    return (
+                      <TableRow key={event.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3 h-3 text-muted-foreground" />
+                            {new Date(event.data).toLocaleDateString('pt-BR')}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono text-xs">{event.cep || "N/A"}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono">
-                        {event.latitude.toFixed(4)}, {event.longitude.toFixed(4)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{event.evento || "Saúde"}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-0.5">
+                            <div className="font-medium text-sm">{event.rua || "Rua não informada"}</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {event.bairro || "Bairro não informado"}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono text-xs">{event.cep || "N/A"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {hasGeo ? (
+                            <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">
+                              No Mapa
+                            </Badge>
+                          ) : (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="destructive" className="flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3" />
+                                    Erro Geo
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs text-xs">
+                                    Não foi possível encontrar as coordenadas para este endereço/CEP. Verifique se os dados estão corretos na planilha.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{event.evento || "Saúde"}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
