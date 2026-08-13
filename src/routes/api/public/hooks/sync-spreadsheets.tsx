@@ -1,8 +1,48 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { createClient } from '@supabase/supabase-js';
 import Papa from 'papaparse';
-import { geocodeByCEP } from '@/lib/geocoding';
 import { createHash } from 'crypto';
+
+export interface GeocodingResult {
+  latitude: number;
+  longitude: number;
+  bairro?: string;
+  rua?: string;
+}
+
+async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> {
+  const cleanCEP = cep.replace(/\D/g, "");
+  if (cleanCEP.length !== 8) return null;
+
+  try {
+    const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+    const viaCepData = await viaCepResponse.json();
+    if (viaCepData.erro) return null;
+
+    const { logradouro, bairro, localidade, uf } = viaCepData;
+    const address = `${logradouro}, ${bairro}, ${localidade} - ${uf}, Brazil`;
+
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+    const nominatimResponse = await fetch(nominatimUrl, {
+      headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+    });
+    const nominatimData = await nominatimResponse.json();
+
+    if (nominatimData && nominatimData.length > 0) {
+      return {
+        latitude: parseFloat(nominatimData[0].lat),
+        longitude: parseFloat(nominatimData[0].lon),
+        bairro,
+        rua: logradouro
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    return null;
+  }
+}
+
 
 // Server-side route for syncing spreadsheets
 export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
