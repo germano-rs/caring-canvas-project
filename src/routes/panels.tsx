@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchSavedPanels, deletePanel } from "@/lib/data-service";
+import { fetchSavedPanels, deletePanel } from "../lib/data-service";
 import {
   Table,
   TableBody,
