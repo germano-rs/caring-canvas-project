@@ -31,24 +31,21 @@ async function runSync() {
     const mapping = config.column_mapping;
     let added = 0;
     
-    for (const row of parsed.data) {
-      const cep = row[mapping.cep];
-      const date = row[mapping.data];
-      console.log(`Row CEP: ${cep}, Date: ${date} (using mapping cep: ${mapping.cep}, data: ${mapping.data})`);
-      
-      const { error } = await supabase.from('spreadsheet_configs').update({
-        column_mapping: {
-          ...mapping,
-          cep: 'CEP',
-          data: 'Data',
-          rua: 'Rua',
-          bairro: 'Bairro',
-          evento: 'Notificação'
-        }
-      }).eq('id', config.id);
-      
-      if (!error) console.log('Successfully updated mapping in DB');
-      break;
+    const { error } = await supabase.from('spreadsheet_configs').update({
+      column_mapping: {
+        ...mapping,
+        cep: 'CEP',
+        data: 'Data',
+        rua: 'Rua',
+        bairro: 'Bairro',
+        evento: 'Notificação'
+      }
+    }).eq('id', config.id);
+    
+    if (error) {
+      console.error('Error updating mapping:', error);
+    } else {
+      console.log('Successfully updated mapping in DB for', config.name);
     }
   }
 }
