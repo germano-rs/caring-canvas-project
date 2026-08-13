@@ -424,16 +424,118 @@ function ConfigPage() {
   );
 }
 
-function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: { 
-  config: any, 
-  onSave: (c: any) => void, 
-  onDelete: () => void,
-  onSync: () => void,
-  isSyncing: boolean
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Histórico de Sincronização
+            </CardTitle>
+            <CardDescription>Últimas 10 execuções do sistema</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {jobHistory?.map((job: any) => (
+              <div key={job.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-center gap-3">
+                  {job.status === 'completed' ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  ) : job.status === 'failed' ? (
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-yellow-500" />
+                  )}
+                  <div>
+                    <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(job.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold">
+                    {job.imported_rows} importados
+                  </div>
+                  {job.failed_rows > 0 && (
+                    <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(!jobHistory || jobHistory.length === 0) && (
+              <p className="text-center text-muted-foreground py-4">Nenhum histórico disponível.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Utilitário de Teste de Geolocalização</CardTitle>
+          <CardDescription>
+            Verifique se a geolocalização automática consegue encontrar as coordenadas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>CEP</Label>
+                <Input
+                  placeholder="Ex: 35790-000"
+                  value={testCep}
+                  onChange={(e) => setTestCep(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Rua (Opcional)</Label>
+                <Input
+                  placeholder="Ex: Rua Direita"
+                  value={testRua}
+                  onChange={(e) => setTestRua(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Bairro (Opcional)</Label>
+                <Input
+                  placeholder="Ex: Centro"
+                  value={testBairro}
+                  onChange={(e) => setTestBairro(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button 
+              onClick={handleTestGeocoding} 
+              disabled={isTesting}
+              className="w-full gap-2"
+            >
+              {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar Geolocalização"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
+  isOpen: boolean;
+  onClose: () => void;
+  config: any;
+  mode: "view" | "edit";
+  onSave: (config: any) => void;
 }) {
-  const [localConfig, setLocalConfig] = useState(config);
+  const [localConfig, setLocalConfig] = useState<any>(null);
+
+  useEffect(() => {
+    if (config) {
+      setLocalConfig({ ...config });
+    }
+  }, [config, isOpen]);
 
   const updateMapping = (key: string, value: string) => {
+    if (!localConfig) return;
     setLocalConfig({
       ...localConfig,
       column_mapping: {
@@ -443,79 +545,143 @@ function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: 
     });
   };
 
+  if (!localConfig) return null;
+
+  const isEdit = mode === "edit";
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="space-y-1 flex-1 mr-4">
-          <CardTitle>
-            <Label htmlFor={`name-${config.id}`} className="text-xs text-muted-foreground font-normal">
-              Nome da planilha
-            </Label>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? (localConfig.id ? "Editar Planilha" : "Nova Planilha") : "Visualizar Planilha"}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? "Altere as configurações de mapeamento e URL." : "Detalhes da configuração e mapeamento."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label>Nome da Planilha</Label>
             <Input
-              id={`name-${config.id}`}
               value={localConfig.name}
               onChange={(e) => setLocalConfig({ ...localConfig, name: e.target.value })}
-              placeholder="Nome da planilha"
-              className="font-bold text-lg mt-1"
+              placeholder="Ex: Dados de Saúde 2024"
+              disabled={!isEdit}
             />
-          </CardTitle>
-          <CardDescription>ID: {config.id} | Última Sincronização: {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}</CardDescription>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label>URL do Google Sheets (Publicada como CSV)</Label>
+              {localConfig.url && (
+                <a 
+                  href={localConfig.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary flex items-center gap-1 hover:underline"
+                >
+                  Abrir link <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+            <Input
+              value={localConfig.url}
+              onChange={(e) => setLocalConfig({ ...localConfig, url: e.target.value })}
+              placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+              disabled={!isEdit}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border p-4 rounded-lg bg-muted/20">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">CEP *</Label>
+              <Input 
+                value={localConfig.column_mapping?.cep} 
+                onChange={(e) => updateMapping("cep", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Data *</Label>
+              <Input 
+                value={localConfig.column_mapping?.data} 
+                onChange={(e) => updateMapping("data", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Evento</Label>
+              <Input 
+                value={localConfig.column_mapping?.evento} 
+                onChange={(e) => updateMapping("evento", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Rua *</Label>
+              <Input 
+                value={localConfig.column_mapping?.rua} 
+                onChange={(e) => updateMapping("rua", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Bairro *</Label>
+              <Input 
+                value={localConfig.column_mapping?.bairro} 
+                onChange={(e) => updateMapping("bairro", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Latitude *</Label>
+              <Input 
+                value={localConfig.column_mapping?.latitude} 
+                onChange={(e) => updateMapping("latitude", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Longitude *</Label>
+              <Input 
+                value={localConfig.column_mapping?.longitude} 
+                onChange={(e) => updateMapping("longitude", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 border-t pt-4">
+            <Switch 
+              id="dialog-geocode" 
+              checked={localConfig.auto_geocode} 
+              onCheckedChange={(checked) => setLocalConfig({...localConfig, auto_geocode: checked})}
+              disabled={!isEdit}
+            />
+            <Label htmlFor="dialog-geocode" className="cursor-pointer">Habilitar Geocoding Automático (Resiliência)</Label>
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onSync} disabled={isSyncing}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-            Sincronizar Agora
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onClose}>
+            {isEdit ? "Cancelar" : "Fechar"}
           </Button>
-          <Button variant="destructive" size="icon" onClick={onDelete}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>URL da Planilha</Label>
-          <Input 
-            value={localConfig.url} 
-            onChange={(e) => setLocalConfig({...localConfig, url: e.target.value})}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>CEP</Label>
-            <Input value={localConfig.column_mapping.cep} onChange={(e) => updateMapping("cep", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Latitude</Label>
-            <Input value={localConfig.column_mapping.latitude} onChange={(e) => updateMapping("latitude", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Longitude</Label>
-            <Input value={localConfig.column_mapping.longitude} onChange={(e) => updateMapping("longitude", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Data</Label>
-            <Input value={localConfig.column_mapping.data} onChange={(e) => updateMapping("data", e.target.value)} />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Switch 
-            id={`geocode-${config.id}`} 
-            checked={localConfig.auto_geocode} 
-            onCheckedChange={(checked) => setLocalConfig({...localConfig, auto_geocode: checked})}
-          />
-          <Label htmlFor={`geocode-${config.id}`}>Habilitar Geocoding Automático por CEP</Label>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button onClick={() => onSave(localConfig)} className="w-full gap-2">
-          <Save className="w-4 h-4" />
-          Salvar Alterações
-        </Button>
-      </CardFooter>
-    </Card>
+          {isEdit && (
+            <Button onClick={() => onSave(localConfig)} className="gap-2">
+              <Save className="w-4 h-4" />
+              Salvar Alterações
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
