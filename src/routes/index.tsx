@@ -109,10 +109,10 @@ function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">Monitor de Eventos de Saúde</h1>
           <p className="text-muted-foreground">Monitoramento e comparação de planilhas de saúde em Curvelo/MG</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Select value={config1} onValueChange={setConfig1}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Selecionar Planilha 1" />
+              <SelectValue placeholder="Selecionar Planilha" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as Planilhas</SelectItem>
@@ -121,6 +121,18 @@ function Dashboard() {
               ))}
             </SelectContent>
           </Select>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data inicial</label>
+            <Input type="date" value={start1} onChange={(e) => setStart1(e.target.value)} className="w-[150px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data final</label>
+            <Input type="date" value={end1} onChange={(e) => setEnd1(e.target.value)} className="w-[150px]" />
+          </div>
+          {(start1 || end1) && (
+            <Button variant="ghost" onClick={() => { setStart1(""); setEnd1(""); }}>Limpar</Button>
+          )}
 
           <Button 
             variant={isComparisonMode ? "default" : "outline"} 
@@ -134,21 +146,22 @@ function Dashboard() {
       </header>
 
       {isComparisonMode && (
-        <div className="bg-muted/50 p-4 rounded-lg flex items-center gap-4 border border-dashed">
-          <span className="text-sm font-medium">Comparar com:</span>
-          <Select value={config2} onValueChange={setConfig2}>
-            <SelectTrigger className="w-[200px] bg-background">
-              <SelectValue placeholder="Selecionar Planilha 2" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Nenhuma</SelectItem>
-              {configs?.filter(c => c.id !== config1).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="bg-muted/50 p-4 rounded-lg flex flex-wrap items-end gap-4 border border-dashed">
+          <span className="text-sm font-medium pb-2">Comparar com outro período (mesma planilha):</span>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data inicial</label>
+            <Input type="date" value={start2} onChange={(e) => setStart2(e.target.value)} className="w-[150px] bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data final</label>
+            <Input type="date" value={end2} onChange={(e) => setEnd2(e.target.value)} className="w-[150px] bg-background" />
+          </div>
+          {(start2 || end2) && (
+            <Button variant="ghost" onClick={() => { setStart2(""); setEnd2(""); }}>Limpar</Button>
+          )}
         </div>
       )}
+
 
       {!isComparisonMode && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
