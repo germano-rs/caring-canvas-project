@@ -128,7 +128,7 @@ function Dashboard() {
           <p className="text-muted-foreground">Monitoramento e comparação de planilhas de saúde em Curvelo/MG</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <Select value={config1} onValueChange={setConfig1}>
+          <Select value={draft.config} onValueChange={(v) => setDraft((d) => ({ ...d, config: v }))}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Selecionar Planilha" />
             </SelectTrigger>
@@ -142,14 +142,19 @@ function Dashboard() {
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data inicial</label>
-            <Input type="date" value={start1} onChange={(e) => setStart1(e.target.value)} className="w-[150px]" />
+            <DateInput value={draft.start1} onChange={(v) => setDraft((d) => ({ ...d, start1: v }))} className="w-[150px]" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data final</label>
-            <Input type="date" value={end1} onChange={(e) => setEnd1(e.target.value)} className="w-[150px]" />
+            <DateInput value={draft.end1} onChange={(v) => setDraft((d) => ({ ...d, end1: v }))} className="w-[150px]" />
           </div>
-          {(start1 || end1) && (
-            <Button variant="ghost" onClick={() => { setStart1(""); setEnd1(""); }}>Limpar</Button>
+
+          <Button onClick={applyFilters} className="gap-2">
+            <Filter className="w-4 h-4" />
+            Filtrar
+          </Button>
+          {(start1 || end1 || start2 || end2) && (
+            <Button variant="ghost" onClick={clearFilters}>Limpar</Button>
           )}
 
           <Button 
@@ -168,16 +173,18 @@ function Dashboard() {
           <span className="text-sm font-medium pb-2">Comparar com outro período (mesma planilha):</span>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data inicial</label>
-            <Input type="date" value={start2} onChange={(e) => setStart2(e.target.value)} className="w-[150px] bg-background" />
+            <DateInput value={draft.start2} onChange={(v) => setDraft((d) => ({ ...d, start2: v }))} className="w-[150px] bg-background" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data final</label>
-            <Input type="date" value={end2} onChange={(e) => setEnd2(e.target.value)} className="w-[150px] bg-background" />
+            <DateInput value={draft.end2} onChange={(v) => setDraft((d) => ({ ...d, end2: v }))} className="w-[150px] bg-background" />
           </div>
-          {(start2 || end2) && (
-            <Button variant="ghost" onClick={() => { setStart2(""); setEnd2(""); }}>Limpar</Button>
-          )}
+          <Button onClick={applyFilters} className="gap-2">
+            <Filter className="w-4 h-4" />
+            Filtrar
+          </Button>
         </div>
+
       )}
 
 
