@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Save, AlertCircle } from "lucide-react";
+import { Save, AlertCircle, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { geocodeByCEP } from "@/lib/geocoding";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -14,10 +16,34 @@ export const Route = createFileRoute("/config")({
 
 function ConfigPage() {
   const [config, setConfig] = useState<Config>(getConfig());
+  const [testCep, setTestCep] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
 
   const handleSave = () => {
     saveConfig(config);
     toast.success("Configurações salvas com sucesso!");
+  };
+
+  const handleTestGeocoding = async () => {
+    if (!testCep) {
+      toast.error("Insira um CEP para testar");
+      return;
+    }
+    setIsTesting(true);
+    try {
+      const result = await geocodeByCEP(testCep);
+      if (result) {
+        toast.success(
+          `Localizado: Lat ${result.latitude.toFixed(4)}, Lon ${result.longitude.toFixed(4)} (${result.bairro})`
+        );
+      } else {
+        toast.error("Não foi possível geolocalizar este CEP.");
+      }
+    } catch (error) {
+      toast.error("Erro ao testar geolocalização.");
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const updateMapping = (key: keyof Config["columnMapping"], value: string) => {
@@ -55,6 +81,44 @@ function ConfigPage() {
               value={config.spreadsheetUrl || ""}
               onChange={(e) => setConfig({ ...config, spreadsheetUrl: e.target.value })}
             />
+          </div>
+          <div className="flex items-center space-x-2 pt-2">
+            <Switch
+              id="auto-geocode"
+              checked={config.autoGeocode}
+              onCheckedChange={(checked) => setConfig({ ...config, autoGeocode: checked })}
+            />
+            <Label htmlFor="auto-geocode" className="cursor-pointer">
+              Geolocalização automática por CEP (se faltar Latitude/Longitude na planilha)
+            </Label>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Testar Geolocalização</CardTitle>
+          <CardDescription>
+            Verifique se o serviço de geocoding está funcionando corretamente para o CEP informado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <div className="flex-1 space-y-2">
+              <Input
+                placeholder="Ex: 35790-000"
+                value={testCep}
+                onChange={(e) => setTestCep(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={handleTestGeocoding} 
+              disabled={isTesting}
+              className="gap-2"
+            >
+              {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar CEP"}
+            </Button>
           </div>
         </CardContent>
       </Card>

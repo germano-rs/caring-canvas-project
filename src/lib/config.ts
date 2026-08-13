@@ -19,6 +19,7 @@ export type Config = z.infer<typeof configSchema>;
 const STORAGE_KEY = "health-heatmap-config";
 
 export const defaultConfig: Config = {
+  autoGeocode: false,
   columnMapping: {
     cep: "cep",
     rua: "rua",
