@@ -116,7 +116,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
 
               // Auto-geocode if missing
               if (config.auto_geocode && (isNaN(lat) || isNaN(lon)) && cep) {
-                const geo = await geocodeByCEP(cep);
+                const geo = await serverGeocodeByCEP(cep);
                 if (geo) {
                   lat = geo.latitude;
                   lon = geo.longitude;
