@@ -202,7 +202,7 @@ function Dashboard() {
           <Info className="w-12 h-12 text-muted-foreground" />
           <h2 className="text-2xl font-bold">Nenhum dado encontrado</h2>
           <p className="text-muted-foreground text-center max-w-md">
-            Certifique-se de ter configurado as planilhas e que a sincronização automática tenha ocorrido.
+            Certifique-se de ter configurado as planilhas e que a sincronização automática tenha ocorrido. Caso a planilha tenha muitos itens e poucos apareçam, verifique se o mapeamento de colunas está correto (maiúsculas/minúsculas importam) e se os endereços são válidos para geolocalização.
           </p>
           <Link to="/config">
             <Button>Ir para Configurações</Button>
