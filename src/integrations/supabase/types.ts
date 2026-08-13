@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      address_geocoding_cache: {
+        Row: {
+          bairro: string | null
+          cidade: string
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          rua: string | null
+          uf: string
+        }
+        Insert: {
+          bairro?: string | null
+          cidade: string
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          rua?: string | null
+          uf: string
+        }
+        Update: {
+          bairro?: string | null
+          cidade?: string
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          rua?: string | null
+          uf?: string
+        }
+        Relationships: []
+      }
       geocoding_cache: {
         Row: {
           bairro: string | null
