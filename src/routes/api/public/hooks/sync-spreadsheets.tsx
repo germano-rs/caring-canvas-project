@@ -15,7 +15,7 @@ const BATCH_SIZE = 20;
 
 async function queryNominatim(queryString: string): Promise<any> {
   try {
-    const url = \`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(queryString)}&limit=1\`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
     });
@@ -28,7 +28,7 @@ async function queryNominatim(queryString: string): Promise<any> {
 
 async function queryPhoton(queryString: string): Promise<any> {
   try {
-    const url = \`https://photon.komoot.io/api/?q=\${encodeURIComponent(queryString)}&limit=1\`;
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
     const response = await fetch(url);
     if (!response.ok) return null;
     const data = await response.json();
@@ -47,9 +47,9 @@ async function queryPhoton(queryString: string): Promise<any> {
 
 async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
   const tryQueries: string[] = [];
-  if (rua && bairro) tryQueries.push(\`\${rua}, \${bairro}, \${cidade} - \${uf}, Brazil\`);
-  if (rua) tryQueries.push(\`\${rua}, \${cidade} - \${uf}, Brazil\`);
-  if (bairro) tryQueries.push(\`\${bairro}, \${cidade} - \${uf}, Brazil\`);
+  if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
+  if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
+  if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
 
   for (const query of tryQueries) {
     let data = await queryNominatim(query);
@@ -72,13 +72,13 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
   try {
-    const viaCepResponse = await fetch(\`https://viacep.com.br/ws/\${cleanCEP}/json/\`);
+    const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
     const viaCepData = await viaCepResponse.json();
     if (!viaCepData || viaCepData.erro) return null;
     const { logradouro, bairro, localidade, uf } = viaCepData;
     let result = await geocodeByAddress(logradouro, bairro, localidade, uf);
     if (!result) {
-      const fallbackUrl = \`https://nominatim.openstreetmap.org/search?format=json&postalcode=\${cleanCEP}&country=Brazil&limit=1\`;
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
       const fallbackResponse = await fetch(fallbackUrl, {
         headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
       });
@@ -163,7 +163,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               let url = config.url;
               if (url.includes("docs.google.com/spreadsheets") && !url.includes("export=csv")) {
                 const match = url.match(/\/d\/([^\/]+)/);
-                if (match) url = \`https://docs.google.com/spreadsheets/d/\${match[1]}/export?format=csv\`;
+                if (match) url = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
               }
               const csvResponse = await fetch(url);
               const csvText = await csvResponse.text();
