@@ -43,7 +43,7 @@ export async function deleteSpreadsheetConfig(id: string) {
   if (error) throw error;
 }
 
-export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: string, endDate?: string): Promise<HealthData[]> {
+export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: string, endDate?: string, mapOnly: boolean = false): Promise<HealthData[]> {
   let query = supabase
     .from("health_events")
     .select("*");
