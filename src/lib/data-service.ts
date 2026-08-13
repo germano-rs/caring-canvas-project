@@ -85,12 +85,22 @@ export async function triggerManualSync(configId?: string) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token || (import.meta.env as any)['VITE_SUPABASE_PUBLISHABLE_KEY'];
 
-  // The sync runs in time-boxed batches; keep calling until nothing is pending.
-  let last: any = null;
-  let totalAdded = 0;
+  // 1. Enqueue
+  const enqueueResponse = await fetch('/api/public/hooks/sync-spreadsheets?mode=enqueue', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  const enqueueResult = await enqueueResponse.json();
 
-  for (let i = 0; i < 20; i++) {
-    const response = await fetch('/api/public/hooks/sync-spreadsheets', {
+  // 2. Process in batches
+  let totalProcessed = 0;
+  let totalImported = 0;
+
+  for (let i = 0; i < 50; i++) {
+    const response = await fetch('/api/public/hooks/sync-spreadsheets?mode=process', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -98,12 +108,36 @@ export async function triggerManualSync(configId?: string) {
       }
     });
 
-    last = await response.json();
-    totalAdded += (last?.results ?? []).reduce((sum: number, r: any) => sum + (r.added ?? 0), 0);
+    const last = await response.json();
+    totalProcessed += (last?.processed ?? 0);
+    totalImported += (last?.imported ?? 0);
 
-    if (!last?.pending) break;
+    if (last?.finished || !last?.processed) break;
   }
 
-  return { ...last, totalAdded };
+  return { success: true, totalProcessed, totalImported };
 }
+
+export async function fetchActiveJobs() {
+  const { data, error } = await supabase
+    .from("sync_jobs")
+    .select("*, spreadsheet_configs(name)")
+    .in("status", ["queued", "running"])
+    .order("created_at", { ascending: false });
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchJobHistory() {
+  const { data, error } = await supabase
+    .from("sync_jobs")
+    .select("*, spreadsheet_configs(name)")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  
+  if (error) throw error;
+  return data;
+}
+
 
