@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "../integrations/supabase/client";
 export async function fetchSpreadsheetConfigs() {
     const { data, error } = await supabase
         .from("spreadsheet_configs")
@@ -45,7 +45,7 @@ export async function fetchEventsFromDb(spreadsheetId, startDate, endDate, mapOn
     const { data, error } = await query.order("event_date", { ascending: false });
     if (error)
         throw error;
-    return data.map(item => ({
+    return data.map((item) => ({
         id: item.id,
         spreadsheet_id: item.spreadsheet_id,
         cep: item.cep,
