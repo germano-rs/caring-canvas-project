@@ -1,16 +1,59 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchSpreadsheetConfigs, saveSpreadsheetConfig, deleteSpreadsheetConfig, triggerManualSync, fetchActiveJobs, fetchJobHistory } from "@/lib/data-service";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { 
+  fetchSpreadsheetConfigs, 
+  saveSpreadsheetConfig, 
+  deleteSpreadsheetConfig, 
+  triggerManualSync, 
+  fetchActiveJobs, 
+  fetchJobHistory 
+} from "@/lib/data-service";
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Save, AlertCircle, Loader2, Plus, Trash2, RefreshCw, History, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { 
+  Save, 
+  Loader2, 
+  Plus, 
+  Trash2, 
+  RefreshCw, 
+  History, 
+  CheckCircle2, 
+  XCircle, 
+  Clock,
+  Eye,
+  Edit,
+  ExternalLink
+} from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { geocodeByCEP, geocodeByAddress } from "@/lib/geocoding";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -23,6 +66,11 @@ function ConfigPage() {
   const [testBairro, setTestBairro] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  
+  // Modal state
+  const [selectedConfig, setSelectedConfig] = useState<any | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
 
   const { data: configs, isLoading } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -49,6 +97,7 @@ function ConfigPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
       toast.success("Configuração salva com sucesso!");
+      setIsDialogOpen(false);
     },
     onError: (error: any) => {
       toast.error(`Erro ao salvar: ${error.message}`);
@@ -64,7 +113,7 @@ function ConfigPage() {
   });
 
   const handleAddConfig = () => {
-    saveMutation.mutate({
+    const newConfig = {
       name: "Nova Planilha",
       url: "",
       column_mapping: {
@@ -77,18 +126,27 @@ function ConfigPage() {
         evento: "evento"
       },
       auto_geocode: true
-    });
+    };
+    setDialogMode("edit");
+    setSelectedConfig(newConfig);
+    setIsDialogOpen(true);
+  };
+
+  const handleOpenDialog = (config: any, mode: "view" | "edit") => {
+    setSelectedConfig(config);
+    setDialogMode(mode);
+    setIsDialogOpen(true);
   };
 
   const handleSync = async (id: string) => {
     setIsSyncing(id);
     try {
-      const result = await triggerManualSync(id);
-      toast.success("Sincronização concluída!");
+      await triggerManualSync(id);
+      toast.success("Sincronização iniciada!");
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
-      queryClient.invalidateQueries({ queryKey: ["healthEvents"] });
+      queryClient.invalidateQueries({ queryKey: ["activeJobs"] });
     } catch (e) {
-      toast.error("Falha na sincronização.");
+      toast.error("Falha ao iniciar sincronização.");
     } finally {
       setIsSyncing(null);
     }
@@ -125,15 +183,15 @@ function ConfigPage() {
     }
   };
 
-  if (isLoading) return <div className="p-8"><Loader2 className="animate-spin" /></div>;
+  if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Configurações de Planilhas</h1>
           <p className="text-muted-foreground mt-2">
-            Gerencie múltiplas fontes de dados do Google Sheets. A sincronização ocorre a cada hora.
+            Gerencie fontes de dados do Google Sheets. A sincronização automática ocorre a cada hora.
           </p>
         </div>
         <Button onClick={handleAddConfig} className="gap-2">
@@ -153,15 +211,15 @@ function ConfigPage() {
               <Card key={job.id} className="border-primary/20 bg-primary/5">
                 <CardContent className="pt-6 space-y-4">
                   <div className="flex justify-between items-center">
-                    <div className="font-medium">{job.spreadsheet_configs?.name}</div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="font-medium text-sm">{job.spreadsheet_configs?.name}</div>
+                    <div className="text-xs text-muted-foreground">
                       {job.processed_rows} de {job.total_rows} registros
                     </div>
                   </div>
-                  <Progress value={job.total_rows > 0 ? (job.processed_rows / job.total_rows) * 100 : 0} />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Iniciado em: {new Date(job.created_at).toLocaleTimeString()}</span>
-                    <span>Status: {job.status === 'running' ? 'Processando...' : 'Na fila'}</span>
+                  <Progress value={job.total_rows > 0 ? (job.processed_rows / job.total_rows) * 100 : 0} className="h-2" />
+                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <span>Iniciado: {new Date(job.created_at).toLocaleTimeString()}</span>
+                    <span className="font-bold text-primary">{job.status === 'running' ? 'Processando...' : 'Na fila'}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -170,24 +228,106 @@ function ConfigPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6">
-        {configs?.map((config) => (
-          <SpreadsheetConfigCard 
-            key={config.id} 
-            config={config} 
-            onSave={(updated) => saveMutation.mutate(updated)}
-            onDelete={() => deleteMutation.mutate(config.id)}
-            onSync={() => handleSync(config.id)}
-            isSyncing={isSyncing === config.id || !!activeJobs?.some((j: any) => j.spreadsheet_id === config.id)}
-          />
-        ))}
-        
-        {configs?.length === 0 && (
-          <div className="text-center p-12 border-2 border-dashed rounded-xl">
-            <p className="text-muted-foreground">Nenhuma planilha configurada ainda.</p>
-          </div>
-        )}
-      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead className="hidden md:table-cell">URL</TableHead>
+                <TableHead>Última Sinc.</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {configs?.map((config) => {
+                const isActiveJob = activeJobs?.some((j: any) => j.spreadsheet_id === config.id);
+                return (
+                  <TableRow key={config.id}>
+                    <TableCell className="font-medium">{config.name}</TableCell>
+                    <TableCell className="hidden md:table-cell max-w-[200px] truncate text-xs text-muted-foreground">
+                      {config.url}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}
+                    </TableCell>
+                    <TableCell>
+                      {isActiveJob ? (
+                        <Badge variant="secondary" className="animate-pulse bg-primary/10 text-primary border-primary/20">
+                          Sincronizando
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          Ativo
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleOpenDialog(config, "view")}
+                          title="Visualizar"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleOpenDialog(config, "edit")}
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleSync(config.id)} 
+                          disabled={isSyncing === config.id || isActiveJob}
+                          title="Sincronizar"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${(isSyncing === config.id || isActiveJob) ? 'animate-spin' : ''}`} />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (confirm("Tem certeza que deseja excluir esta configuração?")) {
+                              deleteMutation.mutate(config.id);
+                            }
+                          }}
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {configs?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic">
+                    Nenhuma planilha configurada ainda.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <ConfigDialog 
+        isOpen={isDialogOpen} 
+        onClose={() => setIsDialogOpen(false)} 
+        config={selectedConfig} 
+        mode={dialogMode}
+        onSave={(updated) => saveMutation.mutate(updated)}
+      />
+
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -284,16 +424,24 @@ function ConfigPage() {
   );
 }
 
-function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: { 
-  config: any, 
-  onSave: (c: any) => void, 
-  onDelete: () => void,
-  onSync: () => void,
-  isSyncing: boolean
+
+function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
+  isOpen: boolean;
+  onClose: () => void;
+  config: any;
+  mode: "view" | "edit";
+  onSave: (config: any) => void;
 }) {
-  const [localConfig, setLocalConfig] = useState(config);
+  const [localConfig, setLocalConfig] = useState<any>(null);
+
+  useEffect(() => {
+    if (config) {
+      setLocalConfig({ ...config });
+    }
+  }, [config, isOpen]);
 
   const updateMapping = (key: string, value: string) => {
+    if (!localConfig) return;
     setLocalConfig({
       ...localConfig,
       column_mapping: {
@@ -303,79 +451,143 @@ function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: 
     });
   };
 
+  if (!localConfig) return null;
+
+  const isEdit = mode === "edit";
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="space-y-1 flex-1 mr-4">
-          <CardTitle>
-            <Label htmlFor={`name-${config.id}`} className="text-xs text-muted-foreground font-normal">
-              Nome da planilha
-            </Label>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? (localConfig.id ? "Editar Planilha" : "Nova Planilha") : "Visualizar Planilha"}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? "Altere as configurações de mapeamento e URL." : "Detalhes da configuração e mapeamento."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label>Nome da Planilha</Label>
             <Input
-              id={`name-${config.id}`}
               value={localConfig.name}
               onChange={(e) => setLocalConfig({ ...localConfig, name: e.target.value })}
-              placeholder="Nome da planilha"
-              className="font-bold text-lg mt-1"
+              placeholder="Ex: Dados de Saúde 2024"
+              disabled={!isEdit}
             />
-          </CardTitle>
-          <CardDescription>ID: {config.id} | Última Sincronização: {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}</CardDescription>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label>URL do Google Sheets (Publicada como CSV)</Label>
+              {localConfig.url && (
+                <a 
+                  href={localConfig.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary flex items-center gap-1 hover:underline"
+                >
+                  Abrir link <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+            <Input
+              value={localConfig.url}
+              onChange={(e) => setLocalConfig({ ...localConfig, url: e.target.value })}
+              placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+              disabled={!isEdit}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border p-4 rounded-lg bg-muted/20">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">CEP *</Label>
+              <Input 
+                value={localConfig.column_mapping?.cep} 
+                onChange={(e) => updateMapping("cep", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Data *</Label>
+              <Input 
+                value={localConfig.column_mapping?.data} 
+                onChange={(e) => updateMapping("data", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Evento</Label>
+              <Input 
+                value={localConfig.column_mapping?.evento} 
+                onChange={(e) => updateMapping("evento", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Rua *</Label>
+              <Input 
+                value={localConfig.column_mapping?.rua} 
+                onChange={(e) => updateMapping("rua", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Bairro *</Label>
+              <Input 
+                value={localConfig.column_mapping?.bairro} 
+                onChange={(e) => updateMapping("bairro", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Latitude *</Label>
+              <Input 
+                value={localConfig.column_mapping?.latitude} 
+                onChange={(e) => updateMapping("latitude", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-muted-foreground">Longitude *</Label>
+              <Input 
+                value={localConfig.column_mapping?.longitude} 
+                onChange={(e) => updateMapping("longitude", e.target.value)} 
+                disabled={!isEdit}
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 border-t pt-4">
+            <Switch 
+              id="dialog-geocode" 
+              checked={localConfig.auto_geocode} 
+              onCheckedChange={(checked) => setLocalConfig({...localConfig, auto_geocode: checked})}
+              disabled={!isEdit}
+            />
+            <Label htmlFor="dialog-geocode" className="cursor-pointer">Habilitar Geocoding Automático (Resiliência)</Label>
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onSync} disabled={isSyncing}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-            Sincronizar Agora
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onClose}>
+            {isEdit ? "Cancelar" : "Fechar"}
           </Button>
-          <Button variant="destructive" size="icon" onClick={onDelete}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>URL da Planilha</Label>
-          <Input 
-            value={localConfig.url} 
-            onChange={(e) => setLocalConfig({...localConfig, url: e.target.value})}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>CEP</Label>
-            <Input value={localConfig.column_mapping.cep} onChange={(e) => updateMapping("cep", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Latitude</Label>
-            <Input value={localConfig.column_mapping.latitude} onChange={(e) => updateMapping("latitude", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Longitude</Label>
-            <Input value={localConfig.column_mapping.longitude} onChange={(e) => updateMapping("longitude", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Data</Label>
-            <Input value={localConfig.column_mapping.data} onChange={(e) => updateMapping("data", e.target.value)} />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Switch 
-            id={`geocode-${config.id}`} 
-            checked={localConfig.auto_geocode} 
-            onCheckedChange={(checked) => setLocalConfig({...localConfig, auto_geocode: checked})}
-          />
-          <Label htmlFor={`geocode-${config.id}`}>Habilitar Geocoding Automático por CEP</Label>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button onClick={() => onSave(localConfig)} className="w-full gap-2">
-          <Save className="w-4 h-4" />
-          Salvar Alterações
-        </Button>
-      </CardFooter>
-    </Card>
+          {isEdit && (
+            <Button onClick={() => onSave(localConfig)} className="gap-2">
+              <Save className="w-4 h-4" />
+              Salvar Alterações
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
