@@ -155,7 +155,7 @@ function Dashboard() {
   };
 
 
-  if (isLoading1) {
+  if (isLoading1 || isLoadingPanel) {
     return (
       <div className="p-8 space-y-6">
         <Skeleton className="h-12 w-1/3" />
