@@ -1,23 +1,40 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { fetchEventsFromDb, fetchSpreadsheetConfigs, type HealthData } from "@/lib/data-service";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchEventsFromDb, fetchSpreadsheetConfigs, savePanel, fetchSavedPanelById, type HealthData } from "@/lib/data-service";
 import { HealthMap } from "@/components/HealthMap";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout, Filter } from "lucide-react";
-import { useState } from "react";
+import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout, Filter, Save } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/DateInput";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { z } from "zod";
 
-
+const dashboardSearchSchema = z.object({
+  panelId: z.string().optional(),
+  readonly: z.string().optional(),
+});
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search) => dashboardSearchSchema.parse(search),
   component: Dashboard,
 });
 
 function Dashboard() {
+  const { panelId, readonly } = Route.useSearch();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isReadOnly = readonly === "true";
+  
+  const [panelName, setPanelName] = useState("");
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+
   const [config1, setConfig1] = useState<string>("all");
   const [isComparisonMode, setIsComparisonMode] = useState(false);
   // Draft (edited in inputs) vs applied (used in queries) filters
