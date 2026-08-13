@@ -101,7 +101,8 @@ function Dashboard() {
         start2,
         end2
       }
-    });
+    };
+    saveMutation.mutate(panelPayload);
   };
 
   const isDirty = config1 !== "all" || !!start1 || !!end1 || isComparisonMode || !!start2 || !!end2;
