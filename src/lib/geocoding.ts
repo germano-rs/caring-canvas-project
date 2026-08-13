@@ -47,33 +47,77 @@ export async function queryPhoton(queryString: string): Promise<any> {
 }
 
 export async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
-  const tryQueries = [];
-  
-  if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
-  if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
-  if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
-  tryQueries.push(`${cidade} - ${uf}, Brazil`);
+  const cleanRua = rua?.trim() || null;
+  const cleanBairro = bairro?.trim() || null;
 
-  for (const query of tryQueries) {
-    // Primary: Nominatim
-    let data = await queryNominatim(query);
-    
-    // Secondary Fallback: Photon (OpenStreetMap base)
-    if (!data || data.length === 0) {
-      console.log(`Nominatim failed for "${query}", trying Photon...`);
-      data = await queryPhoton(query);
-    }
+  try {
+    // 1. Check cache first
+    const { data: cached } = await supabase
+      .from('address_geocoding_cache')
+      .select('*')
+      .eq('cidade', cidade)
+      .eq('uf', uf)
+      .filter('rua', cleanRua === null ? 'is' : 'eq', cleanRua)
+      .filter('bairro', cleanBairro === null ? 'is' : 'eq', cleanBairro)
+      .maybeSingle();
 
-    if (data && data.length > 0) {
+    if (cached) {
       return {
-        latitude: parseFloat(data[0].lat),
-        longitude: parseFloat(data[0].lon),
-        bairro: bairro || null,
-        rua: rua || null
+        latitude: cached.latitude,
+        longitude: cached.longitude,
+        bairro: cached.bairro,
+        rua: cached.rua
       };
     }
+
+    const tryQueries = [];
+    if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
+    if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
+    if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
+    tryQueries.push(`${cidade} - ${uf}, Brazil`);
+
+    let result: GeocodingResult | null = null;
+
+    for (const query of tryQueries) {
+      // Primary: Nominatim
+      let data = await queryNominatim(query);
+      
+      // Secondary Fallback: Photon
+      if (!data || data.length === 0) {
+        console.log(`Nominatim failed for "${query}", trying Photon...`);
+        data = await queryPhoton(query);
+      }
+
+      if (data && data.length > 0) {
+        result = {
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon),
+          bairro: cleanBairro,
+          rua: cleanRua
+        };
+        break;
+      }
+    }
+
+    // 2. Save to cache if found
+    if (result) {
+      await supabase.from('address_geocoding_cache').upsert({
+        rua: cleanRua,
+        bairro: cleanBairro,
+        cidade: cidade,
+        uf: uf,
+        latitude: result.latitude,
+        longitude: result.longitude
+      }, {
+        onConflict: 'rua,bairro,cidade,uf'
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Geocoding by address error:", error);
+    return null;
   }
-  return null;
 }
 
 export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null> {
