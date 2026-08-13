@@ -19,10 +19,26 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const [config1, setConfig1] = useState<string>("all");
   const [isComparisonMode, setIsComparisonMode] = useState(false);
+  // Draft (edited in inputs) vs applied (used in queries) filters
+  const [draft, setDraft] = useState({ config: "all", start1: "", end1: "", start2: "", end2: "" });
   const [start1, setStart1] = useState<string>("");
   const [end1, setEnd1] = useState<string>("");
   const [start2, setStart2] = useState<string>("");
   const [end2, setEnd2] = useState<string>("");
+
+  const applyFilters = () => {
+    setConfig1(draft.config);
+    setStart1(draft.start1);
+    setEnd1(draft.end1);
+    setStart2(draft.start2);
+    setEnd2(draft.end2);
+  };
+
+  const clearFilters = () => {
+    setDraft({ config: draft.config, start1: "", end1: "", start2: "", end2: "" });
+    setStart1(""); setEnd1(""); setStart2(""); setEnd2("");
+  };
+
 
   const toStart = (d: string) => (d ? new Date(`${d}T00:00:00.000Z`).toISOString() : undefined);
   const toEnd = (d: string) => (d ? new Date(`${d}T23:59:59.999Z`).toISOString() : undefined);
