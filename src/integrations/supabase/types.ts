@@ -160,6 +160,107 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_job_items: {
+        Row: {
+          attempts: number | null
+          created_at: string | null
+          error: string | null
+          id: string
+          job_id: string | null
+          row_data: Json
+          row_hash: string
+          spreadsheet_id: string | null
+          status: string
+        }
+        Insert: {
+          attempts?: number | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          row_data: Json
+          row_hash: string
+          spreadsheet_id?: string | null
+          status?: string
+        }
+        Update: {
+          attempts?: number | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          row_data?: Json
+          row_hash?: string
+          spreadsheet_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_job_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "sync_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_job_items_spreadsheet_id_fkey"
+            columns: ["spreadsheet_id"]
+            isOneToOne: false
+            referencedRelation: "spreadsheet_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_jobs: {
+        Row: {
+          created_at: string | null
+          error: string | null
+          failed_rows: number | null
+          finished_at: string | null
+          id: string
+          imported_rows: number | null
+          processed_rows: number | null
+          spreadsheet_id: string | null
+          started_at: string | null
+          status: string
+          total_rows: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          error?: string | null
+          failed_rows?: number | null
+          finished_at?: string | null
+          id?: string
+          imported_rows?: number | null
+          processed_rows?: number | null
+          spreadsheet_id?: string | null
+          started_at?: string | null
+          status?: string
+          total_rows?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          error?: string | null
+          failed_rows?: number | null
+          finished_at?: string | null
+          id?: string
+          imported_rows?: number | null
+          processed_rows?: number | null
+          spreadsheet_id?: string | null
+          started_at?: string | null
+          status?: string
+          total_rows?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_spreadsheet_id_fkey"
+            columns: ["spreadsheet_id"]
+            isOneToOne: false
+            referencedRelation: "spreadsheet_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
