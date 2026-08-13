@@ -47,7 +47,7 @@ function Dashboard() {
   // Load panel if panelId is present
   const { data: panelData, isLoading: isLoadingPanel } = useQuery({
     queryKey: ["savedPanel", panelId],
-    queryFn: () => fetchSavedPanelById(panelId!),
+    queryFn: () => fetchSavedPanelById(panelId as string),
     enabled: !!panelId,
   });
 
