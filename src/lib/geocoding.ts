@@ -36,7 +36,8 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
     ];
 
     for (const query of tryQueries) {
-      if (!query.split(',')[0].trim()) continue; // Skip if first part is empty (e.g. empty logradouro)
+      const queryParts = query.split(',');
+      if (queryParts.length > 0 && !queryParts[0].trim()) continue; // Skip if first part is empty (e.g. empty logradouro)
       
       const data = await queryNominatim(query);
       if (data && data.length > 0) {
