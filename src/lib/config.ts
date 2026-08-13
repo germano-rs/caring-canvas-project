@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const configSchema = z.object({
   spreadsheetUrl: z.string().url().optional(),
+  autoGeocode: z.boolean().default(false),
   columnMapping: z.object({
     cep: z.string(),
     rua: z.string(),
