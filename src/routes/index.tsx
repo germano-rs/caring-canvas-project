@@ -9,6 +9,8 @@ import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout } from "
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -16,8 +18,14 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const [config1, setConfig1] = useState<string>("all");
-  const [config2, setConfig2] = useState<string>("none");
   const [isComparisonMode, setIsComparisonMode] = useState(false);
+  const [start1, setStart1] = useState<string>("");
+  const [end1, setEnd1] = useState<string>("");
+  const [start2, setStart2] = useState<string>("");
+  const [end2, setEnd2] = useState<string>("");
+
+  const toStart = (d: string) => (d ? new Date(`${d}T00:00:00.000Z`).toISOString() : undefined);
+  const toEnd = (d: string) => (d ? new Date(`${d}T23:59:59.999Z`).toISOString() : undefined);
 
   const { data: configs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -25,20 +33,30 @@ function Dashboard() {
   });
 
   const { data: data1, isLoading: isLoading1, error: error1 } = useQuery({
-    queryKey: ["healthEvents", config1],
-    queryFn: () => fetchEventsFromDb(config1 === "all" ? undefined : config1, undefined, undefined, true),
+    queryKey: ["healthEvents", config1, start1, end1],
+    queryFn: () =>
+      fetchEventsFromDb(config1 === "all" ? undefined : config1, toStart(start1), toEnd(end1), true),
     refetchInterval: 60000,
   });
 
-  const { data: data2, isLoading: isLoading2 } = useQuery({
-    queryKey: ["healthEvents", config2],
-    queryFn: () => fetchEventsFromDb(config2 === "none" ? undefined : config2, undefined, undefined, true),
-    enabled: config2 !== "none",
+  const { data: data2 } = useQuery({
+    queryKey: ["healthEvents", config1, start2, end2, "compare"],
+    queryFn: () =>
+      fetchEventsFromDb(config1 === "all" ? undefined : config1, toStart(start2), toEnd(end2), true),
+    enabled: isComparisonMode,
   });
+
+  const formatRange = (s: string, e: string) => {
+    if (!s && !e) return "Todo o período";
+    const fmt = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR");
+    if (s && e) return `${fmt(s)} — ${fmt(e)}`;
+    return s ? `A partir de ${fmt(s)}` : `Até ${fmt(e)}`;
+  };
 
   const getHeatmapPoints = (events?: HealthData[]): [number, number, number][] => {
     return events ? events.map((item) => [item.latitude, item.longitude, 1] as [number, number, number]) : [];
   };
+
 
   if (isLoading1) {
     return (
@@ -93,10 +111,10 @@ function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">Monitor de Eventos de Saúde</h1>
           <p className="text-muted-foreground">Monitoramento e comparação de planilhas de saúde em Curvelo/MG</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Select value={config1} onValueChange={setConfig1}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Selecionar Planilha 1" />
+              <SelectValue placeholder="Selecionar Planilha" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as Planilhas</SelectItem>
@@ -105,6 +123,18 @@ function Dashboard() {
               ))}
             </SelectContent>
           </Select>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data inicial</label>
+            <Input type="date" value={start1} onChange={(e) => setStart1(e.target.value)} className="w-[150px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data final</label>
+            <Input type="date" value={end1} onChange={(e) => setEnd1(e.target.value)} className="w-[150px]" />
+          </div>
+          {(start1 || end1) && (
+            <Button variant="ghost" onClick={() => { setStart1(""); setEnd1(""); }}>Limpar</Button>
+          )}
 
           <Button 
             variant={isComparisonMode ? "default" : "outline"} 
@@ -118,21 +148,22 @@ function Dashboard() {
       </header>
 
       {isComparisonMode && (
-        <div className="bg-muted/50 p-4 rounded-lg flex items-center gap-4 border border-dashed">
-          <span className="text-sm font-medium">Comparar com:</span>
-          <Select value={config2} onValueChange={setConfig2}>
-            <SelectTrigger className="w-[200px] bg-background">
-              <SelectValue placeholder="Selecionar Planilha 2" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Nenhuma</SelectItem>
-              {configs?.filter(c => c.id !== config1).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="bg-muted/50 p-4 rounded-lg flex flex-wrap items-end gap-4 border border-dashed">
+          <span className="text-sm font-medium pb-2">Comparar com outro período (mesma planilha):</span>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data inicial</label>
+            <Input type="date" value={start2} onChange={(e) => setStart2(e.target.value)} className="w-[150px] bg-background" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Data final</label>
+            <Input type="date" value={end2} onChange={(e) => setEnd2(e.target.value)} className="w-[150px] bg-background" />
+          </div>
+          {(start2 || end2) && (
+            <Button variant="ghost" onClick={() => { setStart2(""); setEnd2(""); }}>Limpar</Button>
+          )}
         </div>
       )}
+
 
       {!isComparisonMode && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -179,7 +210,10 @@ function Dashboard() {
       <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
         <Card className="overflow-hidden border-none shadow-lg">
           <div className="p-4 bg-primary/5 border-b flex items-center justify-between">
-            <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+            <div>
+              <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+              <p className="text-xs text-muted-foreground">{formatRange(start1, end1)}</p>
+            </div>
             <Activity className="w-4 h-4 text-primary" />
           </div>
           <HealthMap data={events} heatmapPoints={getHeatmapPoints(events)} />
@@ -188,17 +222,15 @@ function Dashboard() {
         {isComparisonMode && (
           <Card className="overflow-hidden border-none shadow-lg">
             <div className="p-4 bg-secondary/10 border-b flex items-center justify-between">
-              <span className="font-semibold">{config2 === "none" ? "Selecione uma planilha" : configs?.find(c => c.id === config2)?.name}</span>
+              <div>
+                <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+                <p className="text-xs text-muted-foreground">{formatRange(start2, end2)}</p>
+              </div>
               <Activity className="w-4 h-4 text-secondary" />
             </div>
-            {config2 !== "none" ? (
-              <HealthMap data={data2 || []} heatmapPoints={getHeatmapPoints(data2)} />
-            ) : (
-              <div className="h-[600px] flex items-center justify-center bg-muted/20">
-                <p className="text-muted-foreground italic">Selecione uma planilha para comparar</p>
-              </div>
-            )}
+            <HealthMap data={data2 || []} heatmapPoints={getHeatmapPoints(data2)} />
           </Card>
+
         )}
       </div>
 
