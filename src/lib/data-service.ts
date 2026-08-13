@@ -1,79 +1,96 @@
-import Papa from "papaparse";
-import { getConfig } from "./config";
-import { geocodeByCEP } from "./geocoding";
+import { supabase } from "@/integrations/supabase/client";
+import { type Config } from "./config";
 
 export interface HealthData {
-  cep: string;
-  rua: string;
-  bairro: string;
+  id: string;
+  spreadsheet_id: string;
+  cep: string | null;
+  rua: string | null;
+  bairro: string | null;
   longitude: number;
   latitude: number;
   data: string;
-  evento?: string;
-  [key: string]: any;
+  evento: string | null;
 }
 
-export async function fetchSpreadsheetData(): Promise<HealthData[]> {
-  const config = getConfig();
-  if (!config.spreadsheetUrl) {
-    return [];
-  }
+export async function fetchSpreadsheetConfigs() {
+  const { data, error } = await supabase
+    .from("spreadsheet_configs")
+    .select("*")
+    .order("created_at", { ascending: false });
+  
+  if (error) throw error;
+  return data;
+}
 
-  // Convert Google Sheets URL to export=csv if it's a share link
-  let url = config.spreadsheetUrl;
-  if (url.includes("docs.google.com/spreadsheets") && !url.includes("export=csv")) {
-    const match = url.match(/\/d\/([^\/]+)/);
-    if (match) {
-      url = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+export async function saveSpreadsheetConfig(config: Partial<any>) {
+  const { data, error } = await supabase
+    .from("spreadsheet_configs")
+    .upsert(config)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteSpreadsheetConfig(id: string) {
+  const { error } = await supabase
+    .from("spreadsheet_configs")
+    .delete()
+    .eq("id", id);
+  
+  if (error) throw error;
+}
+
+export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: string, endDate?: string): Promise<HealthData[]> {
+  let query = supabase
+    .from("health_events")
+    .select("*");
+  
+  if (spreadsheetId) {
+    query = query.eq("spreadsheet_id", spreadsheetId);
+  }
+  
+  if (startDate) {
+    query = query.gte("event_date", startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte("event_date", endDate);
+  }
+  
+  const { data, error } = await query.order("event_date", { ascending: false });
+  
+  if (error) throw error;
+  
+  return data.map(item => ({
+    id: item.id,
+    spreadsheet_id: item.spreadsheet_id,
+    cep: item.cep,
+    rua: item.rua,
+    bairro: item.bairro,
+    longitude: item.longitude,
+    latitude: item.latitude,
+    data: item.event_date,
+    evento: item.event_type
+  }));
+}
+
+export async function triggerManualSync(configId: string) {
+  // We can call the server route manually if needed, or just wait for the cron.
+  // For simplicity, let's just use the fetcher we already have in the route if we wanted to call it from client,
+  // but usually it's better to let the server route handle it.
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || (import.meta.env as any)['VITE_SUPABASE_PUBLISHABLE_KEY'];
+  
+  const response = await fetch('/api/public/hooks/sync-spreadsheets', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
     }
-  }
-
-  return new Promise((resolve, reject) => {
-    Papa.parse(url, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const mapping = config.columnMapping;
-        const rawData = results.data;
-        
-        const processedData = await Promise.all(
-          rawData.map(async (row: any) => {
-            let lat = parseFloat(row[mapping.latitude]);
-            let lon = parseFloat(row[mapping.longitude]);
-            const cep = row[mapping.cep];
-
-            // Auto-geocode if coordinates are missing and feature is enabled
-            if (config.autoGeocode && (isNaN(lat) || isNaN(lon)) && cep) {
-              const geo = await geocodeByCEP(cep);
-              if (geo) {
-                lat = geo.latitude;
-                lon = geo.longitude;
-              }
-            }
-
-            return {
-              cep: row[mapping.cep],
-              rua: row[mapping.rua],
-              bairro: row[mapping.bairro],
-              longitude: lon,
-              latitude: lat,
-              data: row[mapping.data],
-              evento: mapping.evento ? row[mapping.evento] : undefined,
-              ...row,
-            };
-          })
-        );
-
-        const data = processedData.filter(
-          (item: any) => !isNaN(item.latitude) && !isNaN(item.longitude)
-        );
-        
-        resolve(data as HealthData[]);
-      },
-      error: (error) => {
-        reject(error);
-      },
-    });
   });
+  
+  return await response.json();
 }

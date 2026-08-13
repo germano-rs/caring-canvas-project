@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { getConfig, saveConfig, defaultConfig, type Config } from "@/lib/config";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchSpreadsheetConfigs, saveSpreadsheetConfig, deleteSpreadsheetConfig, triggerManualSync } from "@/lib/data-service";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Save, AlertCircle, Loader2 } from "lucide-react";
+import { Save, AlertCircle, Loader2, Plus, Trash2, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { geocodeByCEP } from "@/lib/geocoding";
 
@@ -15,13 +16,64 @@ export const Route = createFileRoute("/config")({
 });
 
 function ConfigPage() {
-  const [config, setConfig] = useState<Config>(getConfig());
+  const queryClient = useQueryClient();
   const [testCep, setTestCep] = useState("");
   const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
-  const handleSave = () => {
-    saveConfig(config);
-    toast.success("Configurações salvas com sucesso!");
+  const { data: configs, isLoading } = useQuery({
+    queryKey: ["spreadsheetConfigs"],
+    queryFn: fetchSpreadsheetConfigs,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: saveSpreadsheetConfig,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
+      toast.success("Configuração salva com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao salvar: ${error.message}`);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteSpreadsheetConfig,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
+      toast.success("Planilha removida.");
+    },
+  });
+
+  const handleAddConfig = () => {
+    saveMutation.mutate({
+      name: "Nova Planilha",
+      url: "",
+      column_mapping: {
+        cep: "cep",
+        rua: "rua",
+        bairro: "bairro",
+        longitude: "longitude",
+        latitude: "latitude",
+        data: "data",
+        evento: "evento"
+      },
+      auto_geocode: true
+    });
+  };
+
+  const handleSync = async (id: string) => {
+    setIsSyncing(id);
+    try {
+      const result = await triggerManualSync(id);
+      toast.success("Sincronização concluída!");
+      queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
+      queryClient.invalidateQueries({ queryKey: ["healthEvents"] });
+    } catch (e) {
+      toast.error("Falha na sincronização.");
+    } finally {
+      setIsSyncing(null);
+    }
   };
 
   const handleTestGeocoding = async () => {
@@ -46,60 +98,47 @@ function ConfigPage() {
     }
   };
 
-  const updateMapping = (key: keyof Config["columnMapping"], value: string) => {
-    setConfig({
-      ...config,
-      columnMapping: {
-        ...config.columnMapping,
-        [key]: value,
-      },
-    });
-  };
+  if (isLoading) return <div className="p-8"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure a conexão com o Google Sheets e mapeie as colunas necessárias.
-        </p>
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Configurações de Planilhas</h1>
+          <p className="text-muted-foreground mt-2">
+            Gerencie múltiplas fontes de dados do Google Sheets. A sincronização ocorre a cada hora.
+          </p>
+        </div>
+        <Button onClick={handleAddConfig} className="gap-2">
+          <Plus className="w-4 h-4" />
+          Adicionar Planilha
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
+        {configs?.map((config) => (
+          <SpreadsheetConfigCard 
+            key={config.id} 
+            config={config} 
+            onSave={(updated) => saveMutation.mutate(updated)}
+            onDelete={() => deleteMutation.mutate(config.id)}
+            onSync={() => handleSync(config.id)}
+            isSyncing={isSyncing === config.id}
+          />
+        ))}
+        
+        {configs?.length === 0 && (
+          <div className="text-center p-12 border-2 border-dashed rounded-xl">
+            <p className="text-muted-foreground">Nenhuma planilha configurada ainda.</p>
+          </div>
+        )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Conexão com Planilha</CardTitle>
+          <CardTitle>Utilitário de Teste de CEP</CardTitle>
           <CardDescription>
-            Insira o link de compartilhamento da sua planilha Google (ela deve estar configurada como "Qualquer pessoa com o link pode ler").
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="url">URL da Planilha</Label>
-            <Input
-              id="url"
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-              value={config.spreadsheetUrl || ""}
-              onChange={(e) => setConfig({ ...config, spreadsheetUrl: e.target.value })}
-            />
-          </div>
-          <div className="flex items-center space-x-2 pt-2">
-            <Switch
-              id="auto-geocode"
-              checked={config.autoGeocode}
-              onCheckedChange={(checked) => setConfig({ ...config, autoGeocode: checked })}
-            />
-            <Label htmlFor="auto-geocode" className="cursor-pointer">
-              Geolocalização automática por CEP (se faltar Latitude/Longitude na planilha)
-            </Label>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Testar Geolocalização</CardTitle>
-          <CardDescription>
-            Verifique se o serviço de geocoding está funcionando corretamente para o CEP informado.
+            Verifique se a geolocalização automática consegue encontrar as coordenadas para um CEP.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -122,87 +161,96 @@ function ConfigPage() {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Mapeamento de Colunas</CardTitle>
-          <CardDescription>
-            Defina o nome exato da coluna na planilha para cada campo obrigatório.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="cep">CEP</Label>
-            <Input
-              id="cep"
-              value={config.columnMapping.cep}
-              onChange={(e) => updateMapping("cep", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rua">Rua</Label>
-            <Input
-              id="rua"
-              value={config.columnMapping.rua}
-              onChange={(e) => updateMapping("rua", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="bairro">Bairro</Label>
-            <Input
-              id="bairro"
-              value={config.columnMapping.bairro}
-              onChange={(e) => updateMapping("bairro", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="latitude">Latitude</Label>
-            <Input
-              id="latitude"
-              value={config.columnMapping.latitude}
-              onChange={(e) => updateMapping("latitude", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="longitude">Longitude</Label>
-            <Input
-              id="longitude"
-              value={config.columnMapping.longitude}
-              onChange={(e) => updateMapping("longitude", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="data">Data</Label>
-            <Input
-              id="data"
-              value={config.columnMapping.data}
-              onChange={(e) => updateMapping("data", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="evento">Evento (Opcional)</Label>
-            <Input
-              id="evento"
-              value={config.columnMapping.evento || ""}
-              onChange={(e) => updateMapping("evento", e.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center gap-4 bg-blue-50 border border-blue-200 p-4 rounded-lg">
-        <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />
-        <p className="text-sm text-blue-700">
-          <strong>Atenção:</strong> O heatmap será centrado em Curvelo/MG. Certifique-se de que os dados de latitude e longitude correspondem a esta região.
-        </p>
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg" className="gap-2">
-          <Save className="w-4 h-4" />
-          Salvar Configurações
-        </Button>
-      </div>
     </div>
+  );
+}
+
+function SpreadsheetConfigCard({ config, onSave, onDelete, onSync, isSyncing }: { 
+  config: any, 
+  onSave: (c: any) => void, 
+  onDelete: () => void,
+  onSync: () => void,
+  isSyncing: boolean
+}) {
+  const [localConfig, setLocalConfig] = useState(config);
+
+  const updateMapping = (key: string, value: string) => {
+    setLocalConfig({
+      ...localConfig,
+      column_mapping: {
+        ...localConfig.column_mapping,
+        [key]: value
+      }
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className="space-y-1">
+          <CardTitle>
+            <Input 
+              value={localConfig.name} 
+              onChange={(e) => setLocalConfig({...localConfig, name: e.target.value})}
+              className="font-bold text-lg border-none p-0 focus-visible:ring-0 h-auto"
+            />
+          </CardTitle>
+          <CardDescription>ID: {config.id} | Última Sincronização: {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}</CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onSync} disabled={isSyncing}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            Sincronizar Agora
+          </Button>
+          <Button variant="destructive" size="icon" onClick={onDelete}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>URL da Planilha</Label>
+          <Input 
+            value={localConfig.url} 
+            onChange={(e) => setLocalConfig({...localConfig, url: e.target.value})}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+          />
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>CEP</Label>
+            <Input value={localConfig.column_mapping.cep} onChange={(e) => updateMapping("cep", e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Latitude</Label>
+            <Input value={localConfig.column_mapping.latitude} onChange={(e) => updateMapping("latitude", e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Longitude</Label>
+            <Input value={localConfig.column_mapping.longitude} onChange={(e) => updateMapping("longitude", e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Data</Label>
+            <Input value={localConfig.column_mapping.data} onChange={(e) => updateMapping("data", e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch 
+            id={`geocode-${config.id}`} 
+            checked={localConfig.auto_geocode} 
+            onCheckedChange={(checked) => setLocalConfig({...localConfig, auto_geocode: checked})}
+          />
+          <Label htmlFor={`geocode-${config.id}`}>Habilitar Geocoding Automático por CEP</Label>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button onClick={() => onSave(localConfig)} className="w-full gap-2">
+          <Save className="w-4 h-4" />
+          Salvar Alterações
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
