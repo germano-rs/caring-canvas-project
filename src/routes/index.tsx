@@ -249,7 +249,17 @@ function Dashboard() {
             <Columns className="w-4 h-4" />
             Comparar
           </Button>
-        </div>
+            <Button
+              onClick={() => setIsSaveModalOpen(true)}
+              disabled={!isDirty}
+              className="gap-2"
+              variant="outline"
+            >
+              <Save className="w-4 h-4" />
+              Salvar como Painel
+            </Button>
+          </div>
+        )}
       </header>
 
       {isComparisonMode && (
