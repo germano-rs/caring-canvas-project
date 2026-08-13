@@ -20,22 +20,54 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
     if (viaCepData.erro) return null;
 
     const { logradouro, bairro, localidade, uf } = viaCepData;
-    const address = `${logradouro}, ${bairro}, ${localidade} - ${uf}, Brazil`;
+    
+    // Helper to query Nominatim
+    const queryNominatim = async (queryString: string) => {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
+      });
+      return await response.json();
+    };
 
-    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-    const nominatimResponse = await fetch(nominatimUrl, {
+    const tryQueries = [
+      `${logradouro}, ${bairro}, ${localidade} - ${uf}, Brazil`,
+      `${logradouro}, ${localidade} - ${uf}, Brazil`,
+      `${bairro}, ${localidade} - ${uf}, Brazil`,
+      `${localidade} - ${uf}, Brazil`
+    ];
+
+    for (const query of tryQueries) {
+      const queryParts = query.split(',');
+      if (queryParts.length > 0 && queryParts[0] && !queryParts[0].trim()) continue;
+      
+      const data = await queryNominatim(query);
+      if (data && data.length > 0) {
+        return {
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon),
+          bairro,
+          rua: logradouro
+        };
+      }
+    }
+
+    // Fallback: search just by CEP
+    const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
+    const fallbackResponse = await fetch(fallbackUrl, {
       headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
     });
-    const nominatimData = await nominatimResponse.json();
+    const fallbackData = await fallbackResponse.json();
 
-    if (nominatimData && nominatimData.length > 0) {
+    if (fallbackData && fallbackData.length > 0) {
       return {
-        latitude: parseFloat(nominatimData[0].lat),
-        longitude: parseFloat(nominatimData[0].lon),
+        latitude: parseFloat(fallbackData[0].lat),
+        longitude: parseFloat(fallbackData[0].lon),
         bairro,
         rua: logradouro
       };
     }
+
     return null;
   } catch (error) {
     console.error("Geocoding error:", error);
