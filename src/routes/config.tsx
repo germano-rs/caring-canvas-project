@@ -178,7 +178,7 @@ function ConfigPage() {
             onSave={(updated) => saveMutation.mutate(updated)}
             onDelete={() => deleteMutation.mutate(config.id)}
             onSync={() => handleSync(config.id)}
-            isSyncing={isSyncing === config.id || activeJobs?.some((j: any) => j.spreadsheet_id === config.id)}
+            isSyncing={isSyncing === config.id || !!activeJobs?.some((j: any) => j.spreadsheet_id === config.id)}
           />
         ))}
         
