@@ -54,19 +54,20 @@ function Dashboard() {
   useEffect(() => {
     if (panelData) {
       const { config_id, is_comparison, filters, name } = panelData;
+      const f = filters as any;
       setPanelName(name);
-      setIsComparisonMode(is_comparison);
+      setIsComparisonMode(!!is_comparison);
       setConfig1(config_id || "all");
-      setStart1(filters.start1 || "");
-      setEnd1(filters.end1 || "");
-      setStart2(filters.start2 || "");
-      setEnd2(filters.end2 || "");
+      setStart1(f?.start1 || "");
+      setEnd1(f?.end1 || "");
+      setStart2(f?.start2 || "");
+      setEnd2(f?.end2 || "");
       setDraft({
         config: config_id || "all",
-        start1: filters.start1 || "",
-        end1: filters.end1 || "",
-        start2: filters.start2 || "",
-        end2: filters.end2 || ""
+        start1: f?.start1 || "",
+        end1: f?.end1 || "",
+        start2: f?.start2 || "",
+        end2: f?.end2 || ""
       });
     }
   }, [panelData]);
