@@ -82,7 +82,7 @@ export async function triggerManualSync(configId: string) {
   // For simplicity, let's just use the fetcher we already have in the route if we wanted to call it from client,
   // but usually it's better to let the server route handle it.
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const token = session?.access_token || (import.meta.env as any)['VITE_SUPABASE_PUBLISHABLE_KEY'];
   
   const response = await fetch('/api/public/hooks/sync-spreadsheets', {
     method: 'POST',
