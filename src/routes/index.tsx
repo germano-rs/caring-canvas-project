@@ -208,7 +208,10 @@ function Dashboard() {
       <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
         <Card className="overflow-hidden border-none shadow-lg">
           <div className="p-4 bg-primary/5 border-b flex items-center justify-between">
-            <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+            <div>
+              <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+              <p className="text-xs text-muted-foreground">{formatRange(start1, end1)}</p>
+            </div>
             <Activity className="w-4 h-4 text-primary" />
           </div>
           <HealthMap data={events} heatmapPoints={getHeatmapPoints(events)} />
@@ -217,17 +220,15 @@ function Dashboard() {
         {isComparisonMode && (
           <Card className="overflow-hidden border-none shadow-lg">
             <div className="p-4 bg-secondary/10 border-b flex items-center justify-between">
-              <span className="font-semibold">{config2 === "none" ? "Selecione uma planilha" : configs?.find(c => c.id === config2)?.name}</span>
+              <div>
+                <span className="font-semibold">{config1 === "all" ? "Todas as Planilhas" : configs?.find(c => c.id === config1)?.name}</span>
+                <p className="text-xs text-muted-foreground">{formatRange(start2, end2)}</p>
+              </div>
               <Activity className="w-4 h-4 text-secondary" />
             </div>
-            {config2 !== "none" ? (
-              <HealthMap data={data2 || []} heatmapPoints={getHeatmapPoints(data2)} />
-            ) : (
-              <div className="h-[600px] flex items-center justify-center bg-muted/20">
-                <p className="text-muted-foreground italic">Selecione uma planilha para comparar</p>
-              </div>
-            )}
+            <HealthMap data={data2 || []} heatmapPoints={getHeatmapPoints(data2)} />
           </Card>
+
         )}
       </div>
 
