@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { getConfig } from "./config";
+import { geocodeByCEP } from "./geocoding";
 
 export interface HealthData {
   cep: string;
@@ -32,20 +33,43 @@ export async function fetchSpreadsheetData(): Promise<HealthData[]> {
       download: true,
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         const mapping = config.columnMapping;
-        const data = results.data.map((row: any) => ({
-          cep: row[mapping.cep],
-          rua: row[mapping.rua],
-          bairro: row[mapping.bairro],
-          longitude: parseFloat(row[mapping.longitude]),
-          latitude: parseFloat(row[mapping.latitude]),
-          data: row[mapping.data],
-          evento: mapping.evento ? row[mapping.evento] : undefined,
-          ...row,
-        })).filter(item => !isNaN(item.latitude) && !isNaN(item.longitude));
+        const rawData = results.data;
         
-        resolve(data);
+        const processedData = await Promise.all(
+          rawData.map(async (row: any) => {
+            let lat = parseFloat(row[mapping.latitude]);
+            let lon = parseFloat(row[mapping.longitude]);
+            const cep = row[mapping.cep];
+
+            // Auto-geocode if coordinates are missing and feature is enabled
+            if (config.autoGeocode && (isNaN(lat) || isNaN(lon)) && cep) {
+              const geo = await geocodeByCEP(cep);
+              if (geo) {
+                lat = geo.latitude;
+                lon = geo.longitude;
+              }
+            }
+
+            return {
+              cep: row[mapping.cep],
+              rua: row[mapping.rua],
+              bairro: row[mapping.bairro],
+              longitude: lon,
+              latitude: lat,
+              data: row[mapping.data],
+              evento: mapping.evento ? row[mapping.evento] : undefined,
+              ...row,
+            };
+          })
+        );
+
+        const data = processedData.filter(
+          (item: any) => !isNaN(item.latitude) && !isNaN(item.longitude)
+        );
+        
+        resolve(data as HealthData[]);
       },
       error: (error) => {
         reject(error);

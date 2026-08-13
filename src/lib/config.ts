@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const configSchema = z.object({
   spreadsheetUrl: z.string().url().optional(),
+  autoGeocode: z.boolean().default(false),
   columnMapping: z.object({
     cep: z.string(),
     rua: z.string(),
@@ -18,6 +19,7 @@ export type Config = z.infer<typeof configSchema>;
 const STORAGE_KEY = "health-heatmap-config";
 
 export const defaultConfig: Config = {
+  autoGeocode: false,
   columnMapping: {
     cep: "cep",
     rua: "rua",
