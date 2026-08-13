@@ -103,7 +103,7 @@ function Dashboard() {
     acc[bairro] = (acc[bairro] || 0) + 1;
     return acc;
   }, {});
-  const topNeighborhood = Object.entries(neighborhoodCounts).sort((a, b) => b[1] - a[1])[0];
+  const topNeighborhood = Object.entries(neighborhoodCounts).sort((a, b) => b[1] - a[1])[0] || ["N/A", 0];
 
   return (
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
