@@ -363,6 +363,37 @@ function Dashboard() {
           </Link>
         </div>
       )}
+
+      <Dialog open={isSaveModalOpen} onOpenChange={setIsSaveModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Salvar Painel</DialogTitle>
+            <DialogDescription>
+              Dê um nome para esta configuração de filtros e visualização.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome do Painel</Label>
+              <Input
+                id="name"
+                value={panelName}
+                onChange={(e) => setPanelName(e.target.value)}
+                placeholder="Ex: Dengue - Janeiro 2024"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSaveModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSavePanel} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
