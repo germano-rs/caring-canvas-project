@@ -6,8 +6,8 @@ import { createHash } from 'crypto';
 export interface GeocodingResult {
   latitude: number;
   longitude: number;
-  bairro?: string;
-  rua?: string;
+  bairro?: string | null;
+  rua?: string | null;
 }
 
 async function queryNominatim(queryString: string): Promise<any> {
@@ -32,8 +32,8 @@ async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = 
       return {
         latitude: parseFloat(data[0].lat),
         longitude: parseFloat(data[0].lon),
-        bairro: bairro,
-        rua: rua
+        bairro: bairro || null,
+        rua: rua || null
       };
     }
   }
@@ -153,6 +153,18 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 if (geo) {
                   lat = geo.latitude;
                   lon = geo.longitude;
+                } else {
+                  // Final fallback: try geocoding by street/neighborhood names directly from the spreadsheet row if CEP failed
+                  const fallbackGeo = await geocodeByAddress(
+                    row[mapping.rua],
+                    row[mapping.bairro],
+                    "Curvelo", // Default city
+                    "MG"      // Default UF
+                  );
+                  if (fallbackGeo) {
+                    lat = fallbackGeo.latitude;
+                    lon = fallbackGeo.longitude;
+                  }
                 }
               }
 
