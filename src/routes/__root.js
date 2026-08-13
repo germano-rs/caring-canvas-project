@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter, HeadContent, Scripts, useLocation, } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { LayoutDashboard, Settings, Map as MapIcon, Table as TableIcon, Layout } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "../components/ui/sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 function NotFoundComponent() {

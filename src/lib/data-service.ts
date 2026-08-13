@@ -68,7 +68,7 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
   
   if (error) throw error;
   
-  return data.map(item => ({
+  return data.map((item: any) => ({
     id: item.id,
     spreadsheet_id: item.spreadsheet_id,
     cep: item.cep,
@@ -83,7 +83,7 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
 
 export async function triggerManualSync(configId?: string) {
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token || (import.meta.env as any)['VITE_SUPABASE_PUBLISHABLE_KEY'];
+  const token = session?.access_token || (import.meta as any).env['VITE_SUPABASE_PUBLISHABLE_KEY'];
 
   // 1. Enqueue
   const enqueueResponse = await fetch('/api/public/hooks/sync-spreadsheets?mode=enqueue', {

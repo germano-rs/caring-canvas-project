@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "../integrations/supabase/client";
 export async function fetchSpreadsheetConfigs() {
     const { data, error } = await supabase
         .from("spreadsheet_configs")
