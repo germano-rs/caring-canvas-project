@@ -143,7 +143,12 @@ function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalEvents}</div>
-              <p className="text-xs text-muted-foreground">Histórico da seleção</p>
+              <p className="text-xs text-muted-foreground">
+                Histórico da seleção. Se este número for menor que o esperado, verifique o mapeamento das colunas e a geolocalização dos registros na tela de{" "}
+                <Link to="/events" className="underline hover:text-primary">
+                  Registros
+                </Link>.
+              </p>
             </CardContent>
           </Card>
           <Card>
