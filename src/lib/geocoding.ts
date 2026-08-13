@@ -94,8 +94,8 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
         cep: cleanCEP,
         latitude: result.latitude,
         longitude: result.longitude,
-        bairro: result.bairro,
-        rua: result.rua
+        bairro: result.bairro ?? null,
+        rua: result.rua ?? null
       });
     }
 
