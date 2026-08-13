@@ -204,21 +204,25 @@ function Dashboard() {
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Monitor de Eventos de Saúde</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {panelId ? `Painel: ${panelName}` : "Monitor de Eventos de Saúde"}
+          </h1>
           <p className="text-muted-foreground">Monitoramento e comparação de planilhas de saúde em Curvelo/MG</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <Select value={draft.config} onValueChange={(v) => setDraft((d) => ({ ...d, config: v }))}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Selecionar Planilha" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as Planilhas</SelectItem>
-              {configs?.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {!isReadOnly && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Select value={draft.config} onValueChange={(v) => setDraft((d) => ({ ...d, config: v }))}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Selecionar Planilha" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Planilhas</SelectItem>
+                {configs?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Data inicial</label>
