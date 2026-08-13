@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchEventsFromDb, fetchSpreadsheetConfigs, savePanel, fetchSavedPanelById, type HealthData } from "@/lib/data-service";
-import { HealthMap } from "@/components/HealthMap";
+import { fetchEventsFromDb, fetchSpreadsheetConfigs, savePanel, fetchSavedPanelById } from "../lib/data-service";
+import { type HealthData } from "../lib/data-service";
+import { HealthMap } from "../components/HealthMap";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
