@@ -10,7 +10,7 @@ import { AlertCircle, MapPin, Calendar, Activity, Info, Columns, Layout, Filter,
 import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { DateInput } from "@/components/DateInput";
+import { DateInput } from "../components/DateInput";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
