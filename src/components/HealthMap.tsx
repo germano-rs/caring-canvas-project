@@ -7,13 +7,14 @@ const MapComponent = React.lazy(() => import('./MapComponent'));
 interface HealthMapProps {
   data: any[];
   heatmapPoints: [number, number, number][];
+  showMarkers?: boolean;
 }
 
-export function HealthMap({ data, heatmapPoints }: HealthMapProps) {
+export function HealthMap({ data, heatmapPoints, showMarkers = false }: HealthMapProps) {
   return (
     <ClientOnly fallback={<Skeleton className="h-[600px] w-full" />}>
       <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
-        <MapComponent data={data} heatmapPoints={heatmapPoints} />
+        <MapComponent data={data} heatmapPoints={heatmapPoints} showMarkers={showMarkers} />
       </Suspense>
     </ClientOnly>
   );

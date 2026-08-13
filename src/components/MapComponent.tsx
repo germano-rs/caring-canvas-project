@@ -21,9 +21,10 @@ const CURVELO_COORDS: [number, number] = [-18.7564, -44.4308];
 interface MapComponentProps {
   data: any[];
   heatmapPoints: [number, number, number][];
+  showMarkers?: boolean;
 }
 
-export default function MapComponent({ data, heatmapPoints }: MapComponentProps) {
+export default function MapComponent({ data, heatmapPoints, showMarkers = false }: MapComponentProps) {
   return (
     <div className="h-[600px] w-full z-0 relative">
       <MapContainer
@@ -38,7 +39,7 @@ export default function MapComponent({ data, heatmapPoints }: MapComponentProps)
         />
         <HeatmapLayer points={heatmapPoints} />
         
-        {data.slice(0, 50).map((item, idx) => (
+        {showMarkers && data.slice(0, 50).map((item, idx) => (
           <Marker key={idx} position={[item.latitude, item.longitude]}>
             <Popup>
               <div className="space-y-1">
