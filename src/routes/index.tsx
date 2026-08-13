@@ -2,12 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSpreadsheetData } from "@/lib/data-service";
 import { HealthMap } from "@/components/HealthMap";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, MapPin, Calendar, Activity, Info } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
 });
-
-const CURVELO_COORDS: [number, number] = [-18.7564, -44.4308];
 
 function Dashboard() {
   const { data, isLoading, error } = useQuery({
@@ -17,7 +19,7 @@ function Dashboard() {
   });
 
   const heatmapPoints: [number, number, number][] = data
-    ? data.map((item) => [item.latitude, item.longitude, 1])
+    ? data.map((item) => [item.latitude, item.longitude, 1] as [number, number, number])
     : [];
 
   if (isLoading) {
