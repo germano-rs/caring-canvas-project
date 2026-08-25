@@ -441,7 +441,7 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
         <DialogHeader>
           <DialogTitle>{isEdit ? (localConfig.id ? "Editar Planilha" : "Nova Planilha") : "Visualizar Planilha"}</DialogTitle>
           <DialogDescription>
-            {isEdit ? "Altere as configurações de mapeamento e URL." : "Detalhes da configuração e mapeamento."}
+            {isEdit ? "Altere o nome, a URL e as opções de sincronização." : "Detalhes da configuração da planilha."}
           </DialogDescription>
         </DialogHeader>
 
