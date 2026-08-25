@@ -431,17 +431,6 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
     }
   }, [config, isOpen]);
 
-  const updateMapping = (key: string, value: string) => {
-    if (!localConfig) return;
-    setLocalConfig({
-      ...localConfig,
-      column_mapping: {
-        ...localConfig.column_mapping,
-        [key]: value
-      }
-    });
-  };
-
   if (!localConfig) return null;
 
   const isEdit = mode === "edit";
