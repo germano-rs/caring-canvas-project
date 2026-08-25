@@ -76,46 +76,73 @@ export type Database = {
       }
       health_events: {
         Row: {
+          ano_notificacao: string | null
           bairro: string | null
           cep: string | null
           created_at: string | null
+          data_nascimento: string | null
           event_date: string
           event_type: string | null
+          gestante: string | null
           id: string
+          id_unidade: string | null
           latitude: number
+          location_found: boolean
+          logradouro: string | null
           longitude: number
+          numero_notificacao: string | null
           raw_data: Json
           row_hash: string
           rua: string | null
+          sexo: string | null
           spreadsheet_id: string
+          tipo_notificacao: string | null
         }
         Insert: {
+          ano_notificacao?: string | null
           bairro?: string | null
           cep?: string | null
           created_at?: string | null
+          data_nascimento?: string | null
           event_date: string
           event_type?: string | null
+          gestante?: string | null
           id?: string
+          id_unidade?: string | null
           latitude: number
+          location_found?: boolean
+          logradouro?: string | null
           longitude: number
+          numero_notificacao?: string | null
           raw_data: Json
           row_hash: string
           rua?: string | null
+          sexo?: string | null
           spreadsheet_id: string
+          tipo_notificacao?: string | null
         }
         Update: {
+          ano_notificacao?: string | null
           bairro?: string | null
           cep?: string | null
           created_at?: string | null
+          data_nascimento?: string | null
           event_date?: string
           event_type?: string | null
+          gestante?: string | null
           id?: string
+          id_unidade?: string | null
           latitude?: number
+          location_found?: boolean
+          logradouro?: string | null
           longitude?: number
+          numero_notificacao?: string | null
           raw_data?: Json
           row_hash?: string
           rua?: string | null
+          sexo?: string | null
           spreadsheet_id?: string
+          tipo_notificacao?: string | null
         }
         Relationships: [
           {
