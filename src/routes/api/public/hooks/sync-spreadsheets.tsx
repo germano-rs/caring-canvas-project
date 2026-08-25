@@ -13,6 +13,82 @@ export interface GeocodingResult {
 const TIME_BUDGET_MS = 40000; // Leave some buffer
 const BATCH_SIZE = 20;
 
+// Estrutura fixa da planilha de notificações (posições de coluna, 0-indexed)
+// A=0 NÚMERO DA NOTIFICAÇÃO, B=1 TIPO, D=3 DATA, F=5 ANO, J=9 ID UNIDADE,
+// N=13 DATA DE NASCIMENTO, R=17 SEXO, S=18 GESTANTE, AC=28 BAIRRO, AE=30 LOGRADOURO, AK=36 CEP
+const COLUMN_POSITIONS = {
+  numeroNotificacao: 0,  // A
+  tipoNotificacao: 1,    // B
+  dataNotificacao: 3,    // D
+  anoNotificacao: 5,     // F
+  idUnidade: 9,          // J
+  dataNascimento: 13,    // N
+  sexo: 17,              // R
+  gestante: 18,          // S
+  bairro: 28,            // AC
+  logradouro: 30,        // AE
+  cep: 36,               // AK
+} as const;
+
+const EXPECTED_HEADERS: Record<keyof typeof COLUMN_POSITIONS, string[]> = {
+  numeroNotificacao: ['numero da notificacao', 'número da notificação', 'num notificacao'],
+  tipoNotificacao: ['tipo da notificacao', 'tipo da notificação', 'tipo'],
+  dataNotificacao: ['data da notificacao', 'data da notificação', 'data notificacao'],
+  anoNotificacao: ['ano da notificacao', 'ano da notificação', 'ano'],
+  idUnidade: ['id da unidade', 'id unidade', 'unidade'],
+  dataNascimento: ['data de nascimento', 'data nascimento', 'nascimento'],
+  sexo: ['sexo'],
+  gestante: ['gestante'],
+  bairro: ['nome do bairro', 'bairro'],
+  logradouro: ['nome do logradouro', 'logradouro'],
+  cep: ['cep'],
+};
+
+function normalizeHeader(value: any): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+// Lê a primeira linha (cabeçalho) e valida as posições esperadas
+function readHeaders(headerRow: any[]): { headers: Record<string, string>; errors: string[] } {
+  const headers: Record<string, string> = {};
+  const errors: string[] = [];
+
+  for (const [key, idx] of Object.entries(COLUMN_POSITIONS) as [keyof typeof COLUMN_POSITIONS, number][]) {
+    const rawHeader = headerRow?.[idx];
+    const header = rawHeader != null && String(rawHeader).trim() !== '' ? String(rawHeader).trim() : null;
+    if (!header) {
+      errors.push(`Coluna ${indexToExcelLetter(idx)} (posição ${idx + 1}) está vazia no cabeçalho`);
+      continue;
+    }
+    headers[key] = header;
+
+    // Validação flexível: avisa se o cabeçalho não corresponde ao esperado
+    const normalized = normalizeHeader(header);
+    const expected = EXPECTED_HEADERS[key].map(normalizeHeader);
+    if (!expected.some(e => normalized.includes(e) || e.includes(normalized))) {
+      errors.push(`Coluna ${indexToExcelLetter(idx)}: esperado algo como "${EXPECTED_HEADERS[key][0]}", encontrado "${header}"`);
+    }
+  }
+
+  return { headers, errors };
+}
+
+function indexToExcelLetter(index: number): string {
+  let n = index + 1;
+  let s = '';
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
 async function queryNominatim(queryString: string): Promise<any> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1`;
@@ -113,6 +189,14 @@ function parseEventDate(value: any): string {
   return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
+function cell(row: any, header: string | undefined): string | null {
+  if (!header) return null;
+  const v = row[header];
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === '' ? null : s;
+}
+
 export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
   server: {
     handlers: {
@@ -169,19 +253,41 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
               const csvText = await csvResponse.text();
               const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
               const rows = parsed.data as any[];
+              const headerRow = (parsed.meta.fields ?? []) as string[];
+
+              if (rows.length === 0 || headerRow.length === 0) {
+                throw new Error('Planilha vazia ou sem cabeçalho.');
+              }
+
+              // Lê e valida o cabeçalho nas posições fixas (A, B, D, F, J, N, R, S, AC, AE, AK)
+              const { headers, errors } = readHeaders(headerRow);
+              const missingRequired = ['numeroNotificacao', 'dataNotificacao', 'bairro', 'logradouro', 'cep']
+                .filter(k => !headers[k]);
+              if (missingRequired.length > 0 || errors.length > 0) {
+                throw new Error(
+                  'Estrutura da planilha inválida. ' +
+                  (errors.length > 0 ? errors.join('; ') : `Colunas obrigatórias ausentes: ${missingRequired.join(', ')}`)
+                );
+              }
+
+              // Guarda os cabeçalhos detectados para a etapa de processamento
+              await supabase.from('sync_jobs').update({
+                error: null,
+                total_rows: 0
+              }).eq('id', job.id);
 
               // Filter out already imported rows before enqueuing to save space
               const { data: importedHashes } = await supabase
                 .from('health_events')
                 .select('row_hash')
                 .eq('spreadsheet_id', config.id);
-              
+
               const existingSet = new Set((importedHashes ?? []).map(r => r.row_hash));
 
               const itemsToEnqueue = rows.map(row => ({
                 job_id: job.id,
                 spreadsheet_id: config.id,
-                row_data: row,
+                row_data: { __headers: headers, row },
                 row_hash: createHash('md5').update(JSON.stringify(row)).digest('hex'),
                 status: 'pending'
               })).filter(item => !existingSet.has(item.row_hash));
@@ -202,7 +308,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             } catch (err) {
               await supabase.from('sync_jobs').update({
                 status: 'failed',
-                error: String(err),
+                error: String(err instanceof Error ? err.message : err),
                 finished_at: new Date().toISOString()
               }).eq('id', job.id);
             }
@@ -228,7 +334,6 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           }
 
           const config = job.spreadsheet_configs;
-          const mapping = config.column_mapping;
           let processed = 0;
           let imported = 0;
           let failed = 0;
@@ -244,37 +349,60 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             if (!items || items.length === 0) break;
 
             for (const item of items) {
-              const row = item.row_data;
-              let lat = parseFloat(row[mapping.latitude]);
-              let lon = parseFloat(row[mapping.longitude]);
-              const cep = row[mapping.cep];
-              const cleanCEP = cep ? String(cep).replace(/\D/g, '') : '';
+              const headers = item.row_data?.__headers ?? {};
+              const row = item.row_data?.row ?? item.row_data;
+
+              const numeroNotificacao = cell(row, headers.numeroNotificacao);
+              const tipoNotificacao = cell(row, headers.tipoNotificacao);
+              const dataNotificacao = cell(row, headers.dataNotificacao);
+              const anoNotificacao = cell(row, headers.anoNotificacao);
+              const idUnidade = cell(row, headers.idUnidade);
+              const dataNascimento = cell(row, headers.dataNascimento);
+              const sexo = cell(row, headers.sexo);
+              const gestante = cell(row, headers.gestante);
+              const bairro = cell(row, headers.bairro);
+              const logradouro = cell(row, headers.logradouro);
+              const cep = cell(row, headers.cep);
+              const cleanCEP = cep ? cep.replace(/\D/g, '') : '';
+
+              let lat = NaN;
+              let lon = NaN;
 
               try {
-                if (config.auto_geocode && (isNaN(lat) || isNaN(lon))) {
-                   // Reuse geocoding logic (simplified for brevity here but keeping the structure)
-                   let geo = null;
-                   if (cleanCEP.length === 8) {
-                      const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
-                      if (cached) geo = cached;
-                      else {
-                        geo = await serverGeocodeByCEP(cleanCEP);
-                        if (geo) await supabase.from('geocoding_cache').upsert({ cep: cleanCEP, ...geo });
-                      }
-                   }
-                   if (!geo) geo = await geocodeByAddress(row[mapping.rua], row[mapping.bairro]);
-                   if (geo) { lat = geo.latitude; lon = geo.longitude; }
+                if (config.auto_geocode) {
+                  let geo = null;
+                  if (cleanCEP.length === 8) {
+                    const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
+                    if (cached) geo = cached;
+                    else {
+                      geo = await serverGeocodeByCEP(cleanCEP);
+                      if (geo) await supabase.from('geocoding_cache').upsert({ cep: cleanCEP, ...geo });
+                    }
+                  }
+                  if (!geo) geo = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
+                  if (geo) { lat = geo.latitude; lon = geo.longitude; }
                 }
+
+                const locationFound = !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
 
                 await supabase.from('health_events').upsert({
                   spreadsheet_id: config.id,
-                  cep: row[mapping.cep],
-                  rua: row[mapping.rua],
-                  bairro: row[mapping.bairro],
-                  latitude: isNaN(lat) ? 0 : lat,
-                  longitude: isNaN(lon) ? 0 : lon,
-                  event_date: parseEventDate(row[mapping.data]),
-                  event_type: mapping.evento ? row[mapping.evento] : null,
+                  numero_notificacao: numeroNotificacao,
+                  tipo_notificacao: tipoNotificacao,
+                  ano_notificacao: anoNotificacao,
+                  id_unidade: idUnidade,
+                  data_nascimento: dataNascimento,
+                  sexo: sexo,
+                  gestante: gestante,
+                  logradouro: logradouro,
+                  cep: cep,
+                  rua: logradouro,
+                  bairro: bairro,
+                  latitude: locationFound ? lat : 0,
+                  longitude: locationFound ? lon : 0,
+                  location_found: locationFound,
+                  event_date: parseEventDate(dataNotificacao),
+                  event_type: tipoNotificacao,
                   raw_data: row,
                   row_hash: item.row_hash
                 });
@@ -290,20 +418,17 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           }
 
           // Update job progress
-          await supabase.rpc('increment_job_progress', { 
-            job_id: job.id, 
-            p_inc: processed, 
-            i_inc: imported, 
-            f_inc: failed 
+          await supabase.rpc('increment_job_progress', {
+            job_id: job.id,
+            p_inc: processed,
+            i_inc: imported,
+            f_inc: failed
           });
 
           // Check if finished
           const { data: remaining } = await supabase.from('sync_job_items').select('id').eq('job_id', job.id).eq('status', 'pending').limit(1);
           if (!remaining || remaining.length === 0) {
             await supabase.from('sync_jobs').update({ status: 'completed', finished_at: new Date().toISOString() }).eq('id', job.id);
-            
-            // Cleanup: optionally delete items
-            // await supabase.from('sync_job_items').delete().eq('job_id', job.id);
           }
 
           return new Response(JSON.stringify({ success: true, processed, imported, failed, finished: !remaining || remaining.length === 0 }));

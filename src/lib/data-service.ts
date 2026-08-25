@@ -4,11 +4,19 @@ import { type Config } from "./config";
 export interface HealthData {
   id: string;
   spreadsheet_id: string;
+  numero_notificacao: string | null;
+  tipo_notificacao: string | null;
+  ano_notificacao: string | null;
+  id_unidade: string | null;
+  data_nascimento: string | null;
+  sexo: string | null;
+  gestante: string | null;
   cep: string | null;
   rua: string | null;
   bairro: string | null;
   longitude: number;
   latitude: number;
+  location_found: boolean;
   data: string;
   evento: string | null;
 }
@@ -71,11 +79,19 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
   return data.map((item: any) => ({
     id: item.id,
     spreadsheet_id: item.spreadsheet_id,
+    numero_notificacao: item.numero_notificacao,
+    tipo_notificacao: item.tipo_notificacao,
+    ano_notificacao: item.ano_notificacao,
+    id_unidade: item.id_unidade,
+    data_nascimento: item.data_nascimento,
+    sexo: item.sexo,
+    gestante: item.gestante,
     cep: item.cep,
     rua: item.rua,
     bairro: item.bairro,
     longitude: item.longitude,
     latitude: item.latitude,
+    location_found: item.location_found ?? (item.latitude !== 0 && item.longitude !== 0),
     data: item.event_date,
     evento: item.event_type
   }));

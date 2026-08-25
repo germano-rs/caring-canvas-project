@@ -64,9 +64,11 @@ function EventsPage() {
         (event.rua?.toLowerCase().includes(searchLower)) ||
         (event.bairro?.toLowerCase().includes(searchLower)) ||
         (event.cep?.toLowerCase().includes(searchLower)) ||
+        (event.numero_notificacao?.toLowerCase().includes(searchLower)) ||
+        (event.tipo_notificacao?.toLowerCase().includes(searchLower)) ||
         (event.evento?.toLowerCase().includes(searchLower));
 
-      const hasGeo = event.latitude !== 0 && event.longitude !== 0;
+      const hasGeo = event.location_found;
       const matchesStatus = 
         statusFilter === "all" || 
         (statusFilter === "consistent" && hasGeo) || 
@@ -108,7 +110,7 @@ function EventsPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por rua, bairro, CEP..."
+            placeholder="Buscar por nº notificação, tipo, bairro, logradouro, CEP..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="pl-9"
@@ -147,41 +149,61 @@ function EventsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
-                  <TableHead className="w-[120px]">Data</TableHead>
-                  <TableHead>Localização</TableHead>
+                  <TableHead className="w-[110px]">Nº Notificação</TableHead>
+                  <TableHead className="w-[140px]">Tipo</TableHead>
+                  <TableHead className="w-[110px]">Data</TableHead>
+                  <TableHead className="w-[70px]">Ano</TableHead>
+                  <TableHead className="w-[100px]">ID Unidade</TableHead>
+                  <TableHead className="w-[110px]">Nascimento</TableHead>
+                  <TableHead className="w-[70px]">Sexo</TableHead>
+                  <TableHead className="w-[90px]">Gestante</TableHead>
+                  <TableHead>Logradouro</TableHead>
+                  <TableHead>Bairro</TableHead>
                   <TableHead className="w-[100px]">CEP</TableHead>
-                  <TableHead className="w-[180px]">Coordenadas (Lat, Lon)</TableHead>
+                  <TableHead className="w-[170px]">Coordenadas (Lat, Lon)</TableHead>
                   <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead>Evento</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">Carregando dados...</TableCell>
+                    <TableCell colSpan={13} className="text-center py-12 text-muted-foreground italic">Carregando dados...</TableCell>
                   </TableRow>
                 ) : paginatedEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">Nenhum registro encontrado.</TableCell>
+                    <TableCell colSpan={13} className="text-center py-12 text-muted-foreground italic">Nenhum registro encontrado.</TableCell>
                   </TableRow>
                 ) : (
                   paginatedEvents.map((event) => {
-                    const hasGeo = event.latitude !== 0 && event.longitude !== 0;
+                    const hasGeo = event.location_found;
                     return (
                       <TableRow key={event.id} className={!hasGeo ? "bg-destructive/5" : ""}>
+                        <TableCell className="font-medium text-xs whitespace-nowrap">
+                          {event.numero_notificacao || "---"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px] h-5 max-w-[130px] truncate">
+                            {event.tipo_notificacao || "Geral"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="font-medium whitespace-nowrap text-xs">
                           <div className="flex items-center gap-1.5">
                             <Calendar className="w-3 h-3 text-muted-foreground" />
                             {new Date(event.data).toLocaleDateString('pt-BR')}
                           </div>
                         </TableCell>
+                        <TableCell className="text-xs">{event.ano_notificacao || "---"}</TableCell>
+                        <TableCell className="text-xs">{event.id_unidade || "---"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{event.data_nascimento || "---"}</TableCell>
+                        <TableCell className="text-xs">{event.sexo || "---"}</TableCell>
+                        <TableCell className="text-xs">{event.gestante || "---"}</TableCell>
                         <TableCell>
-                          <div className="space-y-0.5 max-w-[200px]">
-                            <div className="font-medium text-xs truncate">{event.rua || "N/I"}</div>
-                            <div className="text-[10px] text-muted-foreground flex items-center gap-1 truncate">
-                              <MapPin className="w-2.5 h-2.5" />
-                              {event.bairro || "N/I"}
-                            </div>
+                          <div className="font-medium text-xs max-w-[180px] truncate">{event.rua || "N/I"}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-[10px] text-muted-foreground flex items-center gap-1 max-w-[140px] truncate">
+                            <MapPin className="w-2.5 h-2.5 shrink-0" />
+                            {event.bairro || "N/I"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -208,11 +230,6 @@ function EventsPage() {
                               Inconsistente
                             </Badge>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-[10px] h-5 max-w-[100px] truncate">
-                            {event.evento || "Geral"}
-                          </Badge>
                         </TableCell>
                       </TableRow>
                     );
