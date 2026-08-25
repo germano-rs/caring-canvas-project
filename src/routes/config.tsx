@@ -116,15 +116,6 @@ function ConfigPage() {
     const newConfig = {
       name: "Nova Planilha",
       url: "",
-      column_mapping: {
-        cep: "cep",
-        rua: "rua",
-        bairro: "bairro",
-        longitude: "longitude",
-        latitude: "latitude",
-        data: "data",
-        evento: "evento"
-      },
       auto_geocode: true
     };
     setDialogMode("edit");
@@ -498,70 +489,27 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
             />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border p-4 rounded-lg bg-muted/20">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">CEP *</Label>
-              <Input 
-                value={localConfig.column_mapping?.cep} 
-                onChange={(e) => updateMapping("cep", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Data *</Label>
-              <Input 
-                value={localConfig.column_mapping?.data} 
-                onChange={(e) => updateMapping("data", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Evento</Label>
-              <Input 
-                value={localConfig.column_mapping?.evento} 
-                onChange={(e) => updateMapping("evento", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Rua *</Label>
-              <Input 
-                value={localConfig.column_mapping?.rua} 
-                onChange={(e) => updateMapping("rua", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Bairro *</Label>
-              <Input 
-                value={localConfig.column_mapping?.bairro} 
-                onChange={(e) => updateMapping("bairro", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Latitude *</Label>
-              <Input 
-                value={localConfig.column_mapping?.latitude} 
-                onChange={(e) => updateMapping("latitude", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase font-bold text-muted-foreground">Longitude *</Label>
-              <Input 
-                value={localConfig.column_mapping?.longitude} 
-                onChange={(e) => updateMapping("longitude", e.target.value)} 
-                disabled={!isEdit}
-                className="h-8 text-sm"
-              />
-            </div>
+          <div className="border p-4 rounded-lg bg-muted/20 space-y-2">
+            <Label className="text-xs uppercase font-bold text-muted-foreground">Estrutura esperada da planilha (posições fixas)</Label>
+            <p className="text-xs text-muted-foreground">
+              O sistema lê o cabeçalho (primeira linha) e extrai os dados das seguintes colunas:
+            </p>
+            <ul className="text-xs text-muted-foreground grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4">
+              <li><strong>A:</strong> Número da Notificação</li>
+              <li><strong>B:</strong> Tipo da Notificação</li>
+              <li><strong>D:</strong> Data da Notificação</li>
+              <li><strong>F:</strong> Ano da Notificação</li>
+              <li><strong>J:</strong> ID da Unidade</li>
+              <li><strong>N:</strong> Data de Nascimento</li>
+              <li><strong>R:</strong> Sexo</li>
+              <li><strong>S:</strong> Gestante</li>
+              <li><strong>AC:</strong> Nome do Bairro</li>
+              <li><strong>AE:</strong> Nome do Logradouro</li>
+              <li><strong>AK:</strong> CEP</li>
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              Se o cabeçalho não corresponder a essa estrutura, a sincronização falhará com uma mensagem de erro indicando a coluna incorreta.
+            </p>
           </div>
 
           <div className="flex items-center space-x-2 border-t pt-4">
