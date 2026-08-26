@@ -6,6 +6,8 @@ interface GoogleMapComponentProps {
   data: any[];
   heatmapPoints: [number, number, number][];
   showMarkers?: boolean;
+  center?: [number, number] | undefined;
+  zoom?: number | undefined;
   apiKey: string;
 }
 
@@ -35,7 +37,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
   return loaderPromise;
 }
 
-export default function GoogleMapComponent({ data, heatmapPoints, showMarkers = false, apiKey }: GoogleMapComponentProps) {
+export default function GoogleMapComponent({ data, heatmapPoints, showMarkers = false, center, zoom, apiKey }: GoogleMapComponentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const heatRef = useRef<any>(null);
@@ -51,8 +53,8 @@ export default function GoogleMapComponent({ data, heatmapPoints, showMarkers = 
         const google = (window as any).google;
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(containerRef.current, {
-            center: CURVELO_COORDS,
-            zoom: 14,
+            center: center ? { lat: center[0], lng: center[1] } : CURVELO_COORDS,
+            zoom: zoom ?? 14,
             streetViewControl: false,
           });
         }
@@ -84,10 +86,15 @@ export default function GoogleMapComponent({ data, heatmapPoints, showMarkers = 
         if (!cancelled) setError(err.message ?? String(err));
       });
 
+    if (mapRef.current && center) {
+      mapRef.current.setCenter({ lat: center[0], lng: center[1] });
+      if (zoom) mapRef.current.setZoom(zoom);
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [apiKey, heatmapPoints, data, showMarkers]);
+  }, [apiKey, heatmapPoints, data, showMarkers, center, zoom]);
 
   if (error) {
     return (

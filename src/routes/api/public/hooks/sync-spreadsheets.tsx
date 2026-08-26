@@ -185,7 +185,13 @@ async function runGeocodingQuery(queryString: string): Promise<{ data: any; prov
   return null;
 }
 
-async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<(GeocodingResult & { provider: string }) | null> {
+// CEPs genéricos (cidade inteira) que não devem ser usados para geocoding
+const GENERIC_CEPS = new Set(['35790000']);
+
+async function geocodeByAddress(rua?: string, bairro?: string, _cidade?: string, _uf?: string): Promise<(GeocodingResult & { provider: string }) | null> {
+  // Sempre buscar dentro de Curvelo - MG
+  const cidade = "Curvelo";
+  const uf = "MG";
   const tryQueries: string[] = [];
   if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
   if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
@@ -209,6 +215,7 @@ async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = 
 async function serverGeocodeByCEP(cep: string): Promise<(GeocodingResult & { provider: string }) | null> {
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
+  if (GENERIC_CEPS.has(cleanCEP)) return null;
   try {
     const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
     const viaCepData = await viaCepResponse.json();
@@ -712,7 +719,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                   // Prioridade 2: geocoding por CEP/endereço
                   if (!Number.isFinite(lat) && config.auto_geocode) {
                     let geo: any = null;
-                    if (cleanCEP.length === 8) {
+                    if (cleanCEP.length === 8 && !GENERIC_CEPS.has(cleanCEP)) {
                       const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
                       if (cached) {
                         geo = cached;
