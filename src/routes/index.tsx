@@ -67,11 +67,47 @@ function Dashboard() {
   const [draft, setDraft] = useState({ config: "all", start1: "", end1: "" });
   const [draftComparisons, setDraftComparisons] = useState<Period[]>([]);
 
+  const [restored, setRestored] = useState(false);
+
+  // Restaura filtros salvos no navegador (quando não estamos abrindo um painel salvo)
+  useEffect(() => {
+    if (panelId) {
+      setRestored(true);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        const list: Period[] = Array.isArray(s.comparisons) ? s.comparisons.slice(0, MAX_COMPARISONS) : [];
+        setConfig1(s.config || "all");
+        setStart1(s.start1 || "");
+        setEnd1(s.end1 || "");
+        setComparisons(list);
+        setDraft({ config: s.config || "all", start1: s.start1 || "", end1: s.end1 || "" });
+        setDraftComparisons(list);
+      }
+    } catch {
+      /* ignore */
+    }
+    setRestored(true);
+  }, [panelId]);
+
+  useEffect(() => {
+    if (!restored || panelId) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ config: config1, start1, end1, comparisons }));
+    } catch {
+      /* ignore */
+    }
+  }, [restored, panelId, config1, start1, end1, comparisons]);
+
   const { data: panelData, isLoading: isLoadingPanel } = useQuery({
     queryKey: ["savedPanel", panelId],
     queryFn: () => fetchSavedPanelById(panelId as string),
     enabled: !!panelId,
   });
+
 
   useEffect(() => {
     if (panelData) {
