@@ -5,7 +5,7 @@ import { type HealthData } from "../lib/data-service";
 import { HealthMap } from "../components/HealthMap";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
-import { MapPin, Calendar, Activity, Info, Columns, Filter, Save, X } from "lucide-react";
+import { MapPin, Calendar, Activity, Info, Columns, Filter, Save, X, Download, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Button } from "../components/ui/button";
