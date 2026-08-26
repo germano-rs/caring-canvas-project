@@ -295,3 +295,29 @@ export async function validateSpreadsheet(params: { configId?: string; url?: str
   }
   return (await response.json()) as SpreadsheetValidation;
 }
+
+export interface ReprocessEventResult {
+  success: boolean;
+  locationFound: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  geoSource: string | null;
+  geoProvider: string | null;
+}
+
+export async function reprocessEvent(eventId: string): Promise<ReprocessEventResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || (import.meta as any).env['VITE_SUPABASE_PUBLISHABLE_KEY'];
+
+  const response = await fetch('/api/public/hooks/sync-spreadsheets?mode=reprocess-event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ eventId }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body?.success === false) {
+    throw new Error(body?.error || `Falha ao reprocessar o registro (HTTP ${response.status}).`);
+  }
+  return body as ReprocessEventResult;
+}
