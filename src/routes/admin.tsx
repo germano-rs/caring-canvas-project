@@ -106,7 +106,7 @@ function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["app-settings"] });
       toast.success("Configurações salvas com sucesso.");
     },
-    onError: (err) => toastError(err, "Não foi possível salvar as configurações"),
+    onError: (err) => toastError(err, "save-settings"),
   });
 
   const needsGoogleKey = mapProvider === "google" || geocodingProvider === "google";
@@ -131,7 +131,7 @@ function AdminPage() {
         toast.error(`Google respondeu "${json.status}": ${json.error_message ?? "verifique a chave e as APIs habilitadas."}`);
       }
     } catch (err) {
-      toastError(err, "Falha ao testar a chave do Google");
+      toastError(err, "generic");
     }
   };
 
@@ -148,7 +148,7 @@ function AdminPage() {
       </header>
 
       {error && (
-        <ErrorDisplay error={error} title="Não foi possível carregar as configurações" onRetry={() => refetch()} />
+        <ErrorDisplay error={error} context="load-settings" onRetry={() => { void refetch(); }} />
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
