@@ -228,6 +228,8 @@ export type Database = {
           last_row_count: number
           last_sync_at: string | null
           name: string
+          sync_lock_owner: string | null
+          sync_locked_at: string | null
           updated_at: string | null
           url: string
         }
@@ -239,6 +241,8 @@ export type Database = {
           last_row_count?: number
           last_sync_at?: string | null
           name: string
+          sync_lock_owner?: string | null
+          sync_locked_at?: string | null
           updated_at?: string | null
           url: string
         }
@@ -250,6 +254,8 @@ export type Database = {
           last_row_count?: number
           last_sync_at?: string | null
           name?: string
+          sync_lock_owner?: string | null
+          sync_locked_at?: string | null
           updated_at?: string | null
           url?: string
         }
@@ -361,9 +367,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_sync_lock: {
+        Args: { p_config_id: string; p_owner: string }
+        Returns: boolean
+      }
       increment_job_progress: {
         Args: { f_inc: number; i_inc: number; job_id: string; p_inc: number }
         Returns: undefined
+      }
+      release_sync_lock: { Args: { p_config_id: string }; Returns: undefined }
+      renew_sync_lock: {
+        Args: { p_config_id: string; p_owner: string }
+        Returns: boolean
       }
     }
     Enums: {

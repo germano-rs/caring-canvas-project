@@ -97,17 +97,20 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
   }));
 }
 
-export async function triggerManualSync(configId?: string) {
+async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token || (import.meta as any).env['VITE_SUPABASE_PUBLISHABLE_KEY'];
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+}
 
-  // 1. Enqueue
-  const enqueueResponse = await fetch('/api/public/hooks/sync-spreadsheets?mode=enqueue', {
+async function runSyncPipeline(configId: string | undefined, mode: 'enqueue' | 'reset') {
+  const headers = await authHeaders();
+
+  // 1. Enqueue (ou reset + enqueue)
+  const enqueueResponse = await fetch(`/api/public/hooks/sync-spreadsheets?mode=${mode}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    }
+    headers,
+    body: JSON.stringify({ configId }),
   });
   if (!enqueueResponse.ok) {
     const body = await enqueueResponse.text();
@@ -115,19 +118,25 @@ export async function triggerManualSync(configId?: string) {
       `Falha ao enfileirar a sincronização (HTTP ${enqueueResponse.status}). ${body.slice(0, 300)}`
     );
   }
-  await enqueueResponse.json().catch(() => null);
+  const enqueueResult = await enqueueResponse.json().catch(() => null);
+
+  // Lock ativo: outra sincronização da mesma planilha está em andamento
+  const blocked = (enqueueResult?.skipped ?? []).find(
+    (s: any) => !configId || s.spreadsheet_id === configId
+  );
+  if (blocked && (enqueueResult?.jobIds ?? []).length === 0) {
+    throw new Error(blocked.reason);
+  }
 
   // 2. Process in batches
   let totalProcessed = 0;
   let totalImported = 0;
+  let totalDuplicates = 0;
 
   for (let i = 0; i < 50; i++) {
     const response = await fetch('/api/public/hooks/sync-spreadsheets?mode=process', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+      headers,
     });
 
     if (!response.ok) {
@@ -140,6 +149,7 @@ export async function triggerManualSync(configId?: string) {
     const last = await response.json().catch(() => null);
     totalProcessed += (last?.processed ?? 0);
     totalImported += (last?.imported ?? 0);
+    totalDuplicates += (last?.duplicates ?? 0);
 
     if (last?.finished || !last?.processed) break;
   }
@@ -161,8 +171,29 @@ export async function triggerManualSync(configId?: string) {
     throw new Error(failure.error);
   }
 
-  return { success: true, totalProcessed, totalImported };
+  return { success: true, totalProcessed, totalImported, totalDuplicates };
 }
+
+export async function triggerManualSync(configId?: string) {
+  return runSyncPipeline(configId, 'enqueue');
+}
+
+export async function resetSpreadsheet(configId: string) {
+  return runSyncPipeline(configId, 'reset');
+}
+
+export async function fetchSyncHistory(configId: string) {
+  const { data, error } = await supabase
+    .from("sync_jobs")
+    .select("*")
+    .eq("spreadsheet_id", configId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+  return data;
+}
+
 
 export async function fetchActiveJobs() {
   const { data, error } = await supabase

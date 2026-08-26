@@ -8,10 +8,13 @@ import {
   triggerManualSync, 
   fetchActiveJobs, 
   fetchJobHistory,
+  fetchSyncHistory,
+  resetSpreadsheet,
   validateSpreadsheet,
   type SpreadsheetValidation
 } from "@/lib/data-service";
 import { ValidationReport } from "@/components/ValidationReport";
+
 import { 
   Card, 
   CardContent, 
@@ -36,8 +39,21 @@ import {
   Eye,
   Edit,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  RotateCcw,
+  Lock,
+  AlertTriangle
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { geocodeByCEP, geocodeByAddress } from "@/lib/geocoding";
@@ -74,11 +90,14 @@ function ConfigPage() {
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState<string | null>(null);
   const [validations, setValidations] = useState<Record<string, SpreadsheetValidation>>({});
+  const [isResetting, setIsResetting] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<any | null>(null);
   
   // Modal state
   const [selectedConfig, setSelectedConfig] = useState<any | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
+
 
   const { data: configs, isLoading, error: configsError, refetch: refetchConfigs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -187,6 +206,31 @@ function ConfigPage() {
     }
   };
 
+  const handleReset = async (config: any) => {
+    const id = config.id;
+    setIsResetting(id);
+    try {
+      const result = await resetSpreadsheet(id);
+      toast.success(`Reprocessamento concluído: ${result.totalImported} registro(s) reimportado(s).`);
+      queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
+      queryClient.invalidateQueries({ queryKey: ["activeJobs"] });
+      queryClient.invalidateQueries({ queryKey: ["jobHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["syncHistory", id] });
+    } catch (e) {
+      toastError(e, "sync");
+    } finally {
+      setIsResetting(null);
+      setResetTarget(null);
+    }
+  };
+
+  // Lock ativo (expira em 10 minutos, igual à regra do servidor)
+  const isLocked = (config: any) =>
+    !!config.sync_locked_at &&
+    Date.now() - new Date(config.sync_locked_at).getTime() < 10 * 60 * 1000;
+
+
+
   const handleTestGeocoding = async () => {
     if (!testCep && !testRua && !testBairro) {
       toast.error("Insira ao menos um CEP, Rua ou Bairro para testar");
@@ -286,8 +330,10 @@ function ConfigPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {configs?.map((config) => {
+              {configs?.map((config: any) => {
                 const isActiveJob = activeJobs?.some((j: any) => j.spreadsheet_id === config.id);
+                const locked = isLocked(config);
+                const busy = isActiveJob || locked || isSyncing === config.id || isResetting === config.id;
                 return (
                   <TableRow key={config.id}>
                     <TableCell className="font-medium">{config.name}</TableCell>
@@ -305,6 +351,10 @@ function ConfigPage() {
                         <Badge variant="secondary" className="animate-pulse bg-primary/10 text-primary border-primary/20">
                           Sincronizando
                         </Badge>
+                      ) : locked ? (
+                        <Badge variant="secondary" className="gap-1 bg-amber-50 text-amber-700 border-amber-200">
+                          <Lock className="w-3 h-3" /> Bloqueada
+                        </Badge>
                       ) : (
                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                           Ativo
@@ -317,7 +367,7 @@ function ConfigPage() {
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleOpenDialog(config, "view")}
-                          title="Visualizar"
+                          title="Visualizar e ver histórico de execuções"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -344,11 +394,23 @@ function ConfigPage() {
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleSync(config)} 
-                          disabled={isSyncing === config.id || isActiveJob}
-                          title="Validar e sincronizar"
+                          disabled={busy}
+                          title={locked ? "Sincronização em andamento para esta planilha" : "Validar e sincronizar"}
                         >
-                          <RefreshCw className={`w-4 h-4 ${(isSyncing === config.id || isActiveJob) ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => setResetTarget(config)}
+                          disabled={busy}
+                          title="Reprocessar planilha do zero"
+                        >
+                          {isResetting === config.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <RotateCcw className="w-4 h-4" />}
+                        </Button>
+
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -405,6 +467,41 @@ function ConfigPage() {
         mode={dialogMode}
         onSave={(updated) => saveMutation.mutate(updated)}
       />
+
+      <AlertDialog open={!!resetTarget} onOpenChange={(open) => { if (!open) setResetTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Reprocessar “{resetTarget?.name}” do zero?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Esta ação <strong>apaga todos os registros já importados</strong> desta planilha,
+                  zera a posição de leitura e reimporta a planilha inteira desde a primeira linha.
+                </p>
+                <p>
+                  Os registros já importados são tratados como <strong>imutáveis</strong> na
+                  sincronização normal — ao reprocessar, eles serão reimportados e a geolocalização
+                  será recalculada, o que pode levar vários minutos.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); if (resetTarget) handleReset(resetTarget); }}
+            >
+              Reprocessar do zero
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
 
 
       <Card>
@@ -520,6 +617,14 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<SpreadsheetValidation | null>(null);
 
+  const { data: syncHistory } = useQuery({
+    queryKey: ["syncHistory", config?.id],
+    queryFn: () => fetchSyncHistory(config.id),
+    enabled: isOpen && !!config?.id,
+    refetchInterval: isOpen ? 5000 : false,
+  });
+
+
   useEffect(() => {
     if (config) {
       setLocalConfig({ ...config });
@@ -626,7 +731,53 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
             />
             <Label htmlFor="dialog-geocode" className="cursor-pointer">Habilitar Geocoding Automático (Resiliência)</Label>
           </div>
+
+          {localConfig.id && (
+            <div className="border-t pt-4 space-y-3">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <History className="w-4 h-4" />
+                Histórico de execuções desta planilha
+              </Label>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {syncHistory?.map((job: any) => (
+                  <div key={job.id} className="border rounded-lg p-3 space-y-1 bg-muted/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        {job.status === 'completed' ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : job.status === 'failed' ? (
+                          <XCircle className="w-4 h-4 text-red-500" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-yellow-500" />
+                        )}
+                        <span className="font-medium">
+                          {new Date(job.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="text-xs text-right">
+                        <span className="font-semibold">{job.imported_rows ?? 0} importados</span>
+                        {(job.failed_rows ?? 0) > 0 && (
+                          <span className="text-destructive ml-2">{job.failed_rows} falhas</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Total enfileirado: {job.total_rows ?? 0} · Processados: {job.processed_rows ?? 0}
+                      {job.finished_at && ` · Fim: ${new Date(job.finished_at).toLocaleString('pt-BR')}`}
+                    </div>
+                    {job.error && (
+                      <p className="text-[11px] text-destructive break-words">{job.error}</p>
+                    )}
+                  </div>
+                ))}
+                {(!syncHistory || syncHistory.length === 0) && (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma execução registrada para esta planilha.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
 
         {validation && (
           <div className="pb-2">
