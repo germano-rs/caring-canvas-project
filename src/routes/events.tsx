@@ -141,6 +141,7 @@ function EventsPage() {
     dir: "desc",
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [mapEvent, setMapEvent] = useState<HealthData | null>(null);
   const itemsPerPage = 10;
 
   const { data: configs } = useQuery({
@@ -364,7 +365,15 @@ function EventsPage() {
                         <TableCell>
                           <div className="font-mono text-[10px] text-muted-foreground">
                             {hasGeo ? (
-                              <span>{cellValue(event, "coordenadas")}</span>
+                              <button
+                                type="button"
+                                onClick={() => setMapEvent(event)}
+                                className="text-primary underline underline-offset-2 hover:opacity-80 inline-flex items-center gap-1"
+                                title="Ver no mapa"
+                              >
+                                <MapPin className="w-2.5 h-2.5" />
+                                {cellValue(event, "coordenadas")}
+                              </button>
                             ) : (
                               <span className="text-destructive font-bold">---, ---</span>
                             )}
