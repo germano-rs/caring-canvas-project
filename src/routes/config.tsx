@@ -468,6 +468,41 @@ function ConfigPage() {
         onSave={(updated) => saveMutation.mutate(updated)}
       />
 
+      <AlertDialog open={!!resetTarget} onOpenChange={(open) => { if (!open) setResetTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Reprocessar “{resetTarget?.name}” do zero?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Esta ação <strong>apaga todos os registros já importados</strong> desta planilha,
+                  zera a posição de leitura e reimporta a planilha inteira desde a primeira linha.
+                </p>
+                <p>
+                  Os registros já importados são tratados como <strong>imutáveis</strong> na
+                  sincronização normal — ao reprocessar, eles serão reimportados e a geolocalização
+                  será recalculada, o que pode levar vários minutos.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); if (resetTarget) handleReset(resetTarget); }}
+            >
+              Reprocessar do zero
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
