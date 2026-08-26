@@ -731,7 +731,53 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
             />
             <Label htmlFor="dialog-geocode" className="cursor-pointer">Habilitar Geocoding Automático (Resiliência)</Label>
           </div>
+
+          {localConfig.id && (
+            <div className="border-t pt-4 space-y-3">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <History className="w-4 h-4" />
+                Histórico de execuções desta planilha
+              </Label>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {syncHistory?.map((job: any) => (
+                  <div key={job.id} className="border rounded-lg p-3 space-y-1 bg-muted/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        {job.status === 'completed' ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : job.status === 'failed' ? (
+                          <XCircle className="w-4 h-4 text-red-500" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-yellow-500" />
+                        )}
+                        <span className="font-medium">
+                          {new Date(job.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="text-xs text-right">
+                        <span className="font-semibold">{job.imported_rows ?? 0} importados</span>
+                        {(job.failed_rows ?? 0) > 0 && (
+                          <span className="text-destructive ml-2">{job.failed_rows} falhas</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Total enfileirado: {job.total_rows ?? 0} · Processados: {job.processed_rows ?? 0}
+                      {job.finished_at && ` · Fim: ${new Date(job.finished_at).toLocaleString('pt-BR')}`}
+                    </div>
+                    {job.error && (
+                      <p className="text-[11px] text-destructive break-words">{job.error}</p>
+                    )}
+                  </div>
+                ))}
+                {(!syncHistory || syncHistory.length === 0) && (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma execução registrada para esta planilha.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
 
         {validation && (
           <div className="pb-2">
