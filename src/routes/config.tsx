@@ -8,10 +8,13 @@ import {
   triggerManualSync, 
   fetchActiveJobs, 
   fetchJobHistory,
+  fetchSyncHistory,
+  resetSpreadsheet,
   validateSpreadsheet,
   type SpreadsheetValidation
 } from "@/lib/data-service";
 import { ValidationReport } from "@/components/ValidationReport";
+
 import { 
   Card, 
   CardContent, 
