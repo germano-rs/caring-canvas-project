@@ -185,6 +185,71 @@ async function runGeocodingQuery(queryString: string): Promise<{ data: any; prov
   return null;
 }
 
+// Versão instrumentada: devolve também o endereço encontrado e a resposta bruta da API
+async function runGeocodingQueryTraced(queryString: string): Promise<{
+  provider: string;
+  latitude: number;
+  longitude: number;
+  address: string | null;
+  raw: any;
+} | null> {
+  if (geoSettings.provider === 'google' && geoSettings.key) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(queryString)}&region=br&key=${encodeURIComponent(geoSettings.key)}`;
+      const response = await fetch(url);
+      const data: any = response.ok ? await response.json() : null;
+      if (data?.status === 'OK' && data.results?.length) {
+        const first = data.results[0];
+        return {
+          provider: 'google',
+          latitude: first.geometry.location.lat,
+          longitude: first.geometry.location.lng,
+          address: first.formatted_address ?? null,
+          raw: first,
+        };
+      }
+    } catch { /* segue para os próximos provedores */ }
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1&addressdetails=1`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'HealthHeatmapApp/1.0' } });
+    const data: any = response.ok ? await response.json() : null;
+    if (Array.isArray(data) && data.length > 0) {
+      return {
+        provider: 'nominatim',
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+        address: data[0].display_name ?? null,
+        raw: data[0],
+      };
+    }
+  } catch { /* segue para o próximo provedor */ }
+
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
+    const response = await fetch(url);
+    const data: any = response.ok ? await response.json() : null;
+    const feat = data?.features?.[0];
+    if (feat) {
+      const p = feat.properties ?? {};
+      const address = [p.name, p.street, p.district, p.city, p.state, p.country]
+        .filter(Boolean)
+        .join(', ') || null;
+      return {
+        provider: 'photon',
+        latitude: feat.geometry.coordinates[1],
+        longitude: feat.geometry.coordinates[0],
+        address,
+        raw: feat,
+      };
+    }
+  } catch { /* sem resultado */ }
+
+  return null;
+}
+
+
 // CEPs genéricos (cidade inteira) que não devem ser usados para geocoding
 const GENERIC_CEPS = new Set(['35790000']);
 
