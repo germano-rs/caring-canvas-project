@@ -193,6 +193,7 @@ export async function geocodeByAddress(rua?: string, bairro?: string, _cidade?: 
 export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null> {
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
+  if (GENERIC_CEPS.has(cleanCEP)) return null;
 
   try {
     // 1. Check cache first
