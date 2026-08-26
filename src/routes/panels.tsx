@@ -79,6 +79,10 @@ function PanelsPage() {
         </Button>
       </header>
 
+      {panelsError && (
+        <ErrorDisplay error={panelsError} context="generic" onRetry={() => refetchPanels()} />
+      )}
+
       <Card>
         <CardHeader className="pb-2 border-b">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
