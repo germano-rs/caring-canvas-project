@@ -86,13 +86,14 @@ export default function GoogleMapComponent({ data, heatmapPoints, showMarkers = 
         if (!cancelled) setError(err.message ?? String(err));
       });
 
-    return () => {
-      cancelled = true;
-    };
     if (mapRef.current && center) {
       mapRef.current.setCenter({ lat: center[0], lng: center[1] });
       if (zoom) mapRef.current.setZoom(zoom);
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [apiKey, heatmapPoints, data, showMarkers, center, zoom]);
 
   if (error) {
