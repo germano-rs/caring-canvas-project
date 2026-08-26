@@ -393,39 +393,85 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
         }
 
 
-        if (mode === 'enqueue') {
-          // 1. Find all active spreadsheets
-          const { data: configs } = await supabase.from('spreadsheet_configs').select('*');
+        if (mode === 'enqueue' || mode === 'reset') {
+          let body: any = {};
+          try { body = await request.json(); } catch { body = {}; }
+          const targetConfigId: string | null = body?.configId ?? null;
+          const isReset = mode === 'reset';
+
+          if (isReset && !targetConfigId) {
+            return Response.json({ error: 'É necessário informar a planilha para reprocessar do zero.' }, { status: 400 });
+          }
+
+          let configsQuery = supabase.from('spreadsheet_configs').select('*');
+          if (targetConfigId) configsQuery = configsQuery.eq('id', targetConfigId);
+          const { data: configs } = await configsQuery;
+
           const jobIds: string[] = [];
+          const skipped: { spreadsheet_id: string; reason: string }[] = [];
 
           for (const config of configs ?? []) {
             if (!config.url) continue;
 
-            // Check if there is already a running job for this spreadsheet
+            // ---- Lock: impede duas sincronizações simultâneas da mesma planilha ----
+            const lockOwner = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+            const { data: gotLock } = await supabase.rpc('acquire_sync_lock', {
+              p_config_id: config.id,
+              p_owner: lockOwner,
+            });
+
+            if (!gotLock) {
+              skipped.push({
+                spreadsheet_id: config.id,
+                reason: 'Já existe uma sincronização em andamento para esta planilha. Aguarde a conclusão antes de iniciar outra.',
+              });
+              continue;
+            }
+
+            // Segurança extra: job ativo pendente para a mesma planilha
             const { data: existingJob } = await supabase
               .from('sync_jobs')
               .select('id')
               .eq('spreadsheet_id', config.id)
               .in('status', ['queued', 'running'])
+              .limit(1)
               .maybeSingle();
 
-            if (existingJob) continue;
+            if (existingJob && !isReset) {
+              await supabase.rpc('release_sync_lock', { p_config_id: config.id });
+              skipped.push({
+                spreadsheet_id: config.id,
+                reason: 'Já existe um job de sincronização na fila para esta planilha.',
+              });
+              continue;
+            }
 
-            // Create new job
             const { data: job } = await supabase
               .from('sync_jobs')
-              .insert({
-                spreadsheet_id: config.id,
-                status: 'queued'
-              })
+              .insert({ spreadsheet_id: config.id, status: 'queued' })
               .select()
               .single();
 
-            if (!job) continue;
+            if (!job) {
+              await supabase.rpc('release_sync_lock', { p_config_id: config.id });
+              continue;
+            }
             jobIds.push(job.id);
 
-            // Fetch CSV and enqueue items
             try {
+              if (isReset) {
+                // Reprocessa do zero: limpa dados importados e a posição de leitura
+                await supabase.from('sync_job_items').delete().eq('spreadsheet_id', config.id).eq('status', 'pending');
+                await supabase.from('health_events').delete().eq('spreadsheet_id', config.id);
+                await supabase.from('spreadsheet_configs').update({ last_row_count: 0 }).eq('id', config.id);
+                await supabase
+                  .from('sync_jobs')
+                  .update({ status: 'completed', finished_at: new Date().toISOString(), error: 'Cancelado: substituído pelo reprocessamento total.' })
+                  .eq('spreadsheet_id', config.id)
+                  .in('status', ['queued', 'running'])
+                  .neq('id', job.id);
+              }
+
               let url = config.url;
               if (url.includes("docs.google.com/spreadsheets") && !url.includes("export=csv")) {
                 const match = url.match(/\/d\/([^\/]+)/);
@@ -452,16 +498,10 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 );
               }
 
-              // Guarda os cabeçalhos detectados para a etapa de processamento
-              await supabase.from('sync_jobs').update({
-                error: null,
-                total_rows: 0
-              }).eq('id', job.id);
+              await supabase.from('sync_jobs').update({ error: null, total_rows: 0 }).eq('id', job.id);
 
-              // Registros já lidos são imutáveis: a sincronização só considera as linhas
-              // que estão além da quantidade de registros lida na última sincronização.
-              const lastRowCount = Number(config.last_row_count ?? 0);
-              const newRows = lastRowCount > 0 ? rows.slice(lastRowCount) : rows;
+              // Registros já lidos são imutáveis: só considera as linhas além da última posição lida
+              const lastRowCount = isReset ? 0 : Number(config.last_row_count ?? 0);
 
               if (lastRowCount > rows.length) {
                 throw new Error(
@@ -470,50 +510,67 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 );
               }
 
-              // Rede de segurança: ignora linhas cujo conteúdo já foi importado
+              const newRows = rows.slice(lastRowCount);
+
+              // Deduplicação: chave estável por planilha + número da notificação + posição da linha
               const { data: importedHashes } = await supabase
                 .from('health_events')
                 .select('row_hash')
                 .eq('spreadsheet_id', config.id);
 
               const existingSet = new Set((importedHashes ?? []).map(r => r.row_hash));
+              const seen = new Set<string>();
 
-              const itemsToEnqueue = newRows.map(row => ({
-                job_id: job.id,
-                spreadsheet_id: config.id,
-                row_data: { __headers: headers, row },
-                row_hash: createHash('md5').update(JSON.stringify(row)).digest('hex'),
-                status: 'pending'
-              })).filter(item => !existingSet.has(item.row_hash));
+              const itemsToEnqueue = newRows.map((row, i) => {
+                const absoluteIndex = lastRowCount + i;
+                const notif = cell(row, headers.numeroNotificacao) ?? '';
+                const key = `${config.id}|${notif}|${absoluteIndex}`;
+                return {
+                  job_id: job.id,
+                  spreadsheet_id: config.id,
+                  row_data: { __headers: headers, row },
+                  row_hash: createHash('md5').update(key).digest('hex'),
+                  status: 'pending'
+                };
+              }).filter(item => {
+                if (existingSet.has(item.row_hash) || seen.has(item.row_hash)) return false;
+                seen.add(item.row_hash);
+                return true;
+              });
 
               if (itemsToEnqueue.length > 0) {
-                // Insert in batches of 500
                 for (let i = 0; i < itemsToEnqueue.length; i += 500) {
                   await supabase.from('sync_job_items').insert(itemsToEnqueue.slice(i, i + 500));
                 }
               }
 
-              // Marca a nova posição de leitura (total de linhas da planilha nesta leitura)
               await supabase.from('spreadsheet_configs')
                 .update({ last_row_count: rows.length })
                 .eq('id', config.id);
 
+              const finished = itemsToEnqueue.length === 0;
               await supabase.from('sync_jobs').update({
                 total_rows: itemsToEnqueue.length,
-                status: itemsToEnqueue.length > 0 ? 'queued' : 'completed',
-                finished_at: itemsToEnqueue.length > 0 ? null : new Date().toISOString()
+                status: finished ? 'completed' : 'queued',
+                finished_at: finished ? new Date().toISOString() : null
               }).eq('id', job.id);
 
-
+              // Quando não há nada a processar, o lock é liberado imediatamente
+              if (finished) {
+                await supabase.rpc('release_sync_lock', { p_config_id: config.id });
+              }
             } catch (err) {
               await supabase.from('sync_jobs').update({
                 status: 'failed',
                 error: String(err instanceof Error ? err.message : err),
-                finished_at: new Date().toISOString()
+                finished_at: new Date().toISOString(),
+                imported_rows: 0,
+                failed_rows: 0
               }).eq('id', job.id);
+              await supabase.rpc('release_sync_lock', { p_config_id: config.id });
             }
           }
-          return new Response(JSON.stringify({ success: true, jobIds }));
+          return Response.json({ success: true, jobIds, skipped });
         }
 
         if (mode === 'process') {
@@ -526,7 +583,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             .limit(1)
             .maybeSingle();
 
-          if (!job) return new Response(JSON.stringify({ success: true, message: 'No jobs to process' }));
+          if (!job) return Response.json({ success: true, message: 'No jobs to process' });
 
           // Mark job as running
           if (job.status === 'queued') {
@@ -534,87 +591,119 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           }
 
           const config = job.spreadsheet_configs;
+          const lockOwner: string | null = config?.sync_lock_owner ?? null;
           let processed = 0;
           let imported = 0;
+          let duplicates = 0;
           let failed = 0;
+          let fatalError: string | null = null;
 
-          while (Date.now() - startedAt < TIME_BUDGET_MS) {
-            const { data: items } = await supabase
-              .from('sync_job_items')
-              .select('*')
-              .eq('job_id', job.id)
-              .eq('status', 'pending')
-              .limit(BATCH_SIZE);
+          try {
+            while (Date.now() - startedAt < TIME_BUDGET_MS) {
+              const { data: items } = await supabase
+                .from('sync_job_items')
+                .select('*')
+                .eq('job_id', job.id)
+                .eq('status', 'pending')
+                .limit(BATCH_SIZE);
 
-            if (!items || items.length === 0) break;
+              if (!items || items.length === 0) break;
 
-            for (const item of items) {
-              const headers = item.row_data?.__headers ?? {};
-              const row = item.row_data?.row ?? item.row_data;
-
-              const numeroNotificacao = cell(row, headers.numeroNotificacao);
-              const tipoNotificacao = cell(row, headers.tipoNotificacao);
-              const dataNotificacao = cell(row, headers.dataNotificacao);
-              const anoNotificacao = cell(row, headers.anoNotificacao);
-              const idUnidade = cell(row, headers.idUnidade);
-              const dataNascimento = cell(row, headers.dataNascimento);
-              const sexo = cell(row, headers.sexo);
-              const gestante = cell(row, headers.gestante);
-              const bairro = cell(row, headers.bairro);
-              const logradouro = cell(row, headers.logradouro);
-              const cep = cell(row, headers.cep);
-              const cleanCEP = cep ? cep.replace(/\D/g, '') : '';
-
-              let lat = NaN;
-              let lon = NaN;
-
-              try {
-                if (config.auto_geocode) {
-                  let geo = null;
-                  if (cleanCEP.length === 8) {
-                    const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
-                    if (cached) geo = cached;
-                    else {
-                      geo = await serverGeocodeByCEP(cleanCEP);
-                      if (geo) await supabase.from('geocoding_cache').upsert({ cep: cleanCEP, ...geo });
-                    }
-                  }
-                  if (!geo) geo = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
-                  if (geo) { lat = geo.latitude; lon = geo.longitude; }
-                }
-
-                const locationFound = !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
-
-                await supabase.from('health_events').upsert({
-                  spreadsheet_id: config.id,
-                  numero_notificacao: numeroNotificacao,
-                  tipo_notificacao: tipoNotificacao,
-                  ano_notificacao: anoNotificacao,
-                  id_unidade: idUnidade,
-                  data_nascimento: dataNascimento,
-                  sexo: sexo,
-                  gestante: gestante,
-                  logradouro: logradouro,
-                  cep: cep,
-                  rua: logradouro,
-                  bairro: bairro,
-                  latitude: locationFound ? lat : 0,
-                  longitude: locationFound ? lon : 0,
-                  location_found: locationFound,
-                  event_date: parseEventDate(dataNotificacao),
-                  event_type: tipoNotificacao,
-                  raw_data: row,
-                  row_hash: item.row_hash
-                });
-
-                await supabase.from('sync_job_items').update({ status: 'completed' }).eq('id', item.id);
-                imported++;
-              } catch (err) {
-                await supabase.from('sync_job_items').update({ status: 'failed', error: String(err) }).eq('id', item.id);
-                failed++;
+              // Renova o lock a cada lote para não expirar durante o processamento
+              if (lockOwner) {
+                await supabase.rpc('renew_sync_lock', { p_config_id: config.id, p_owner: lockOwner });
               }
-              processed++;
+
+              for (const item of items) {
+                const headers = item.row_data?.__headers ?? {};
+                const row = item.row_data?.row ?? item.row_data;
+
+                const numeroNotificacao = cell(row, headers.numeroNotificacao);
+                const tipoNotificacao = cell(row, headers.tipoNotificacao);
+                const dataNotificacao = cell(row, headers.dataNotificacao);
+                const anoNotificacao = cell(row, headers.anoNotificacao);
+                const idUnidade = cell(row, headers.idUnidade);
+                const dataNascimento = cell(row, headers.dataNascimento);
+                const sexo = cell(row, headers.sexo);
+                const gestante = cell(row, headers.gestante);
+                const bairro = cell(row, headers.bairro);
+                const logradouro = cell(row, headers.logradouro);
+                const cep = cell(row, headers.cep);
+                const cleanCEP = cep ? cep.replace(/\D/g, '') : '';
+
+                let lat = NaN;
+                let lon = NaN;
+
+                try {
+                  // Deduplicação: se a chave já existe, não reimporta
+                  const { data: already } = await supabase
+                    .from('health_events')
+                    .select('id')
+                    .eq('spreadsheet_id', config.id)
+                    .eq('row_hash', item.row_hash)
+                    .maybeSingle();
+
+                  if (already) {
+                    await supabase.from('sync_job_items').update({ status: 'completed' }).eq('id', item.id);
+                    duplicates++;
+                    processed++;
+                    continue;
+                  }
+
+                  if (config.auto_geocode) {
+                    let geo = null;
+                    if (cleanCEP.length === 8) {
+                      const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
+                      if (cached) geo = cached;
+                      else {
+                        geo = await serverGeocodeByCEP(cleanCEP);
+                        if (geo) await supabase.from('geocoding_cache').upsert({ cep: cleanCEP, ...geo });
+                      }
+                    }
+                    if (!geo) geo = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
+                    if (geo) { lat = geo.latitude; lon = geo.longitude; }
+                  }
+
+                  const locationFound = !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
+
+                  const { error: upsertError } = await supabase.from('health_events').upsert({
+                    spreadsheet_id: config.id,
+                    numero_notificacao: numeroNotificacao,
+                    tipo_notificacao: tipoNotificacao,
+                    ano_notificacao: anoNotificacao,
+                    id_unidade: idUnidade,
+                    data_nascimento: dataNascimento,
+                    sexo: sexo,
+                    gestante: gestante,
+                    logradouro: logradouro,
+                    cep: cep,
+                    rua: logradouro,
+                    bairro: bairro,
+                    latitude: locationFound ? lat : 0,
+                    longitude: locationFound ? lon : 0,
+                    location_found: locationFound,
+                    event_date: parseEventDate(dataNotificacao),
+                    event_type: tipoNotificacao,
+                    raw_data: row,
+                    row_hash: item.row_hash
+                  }, { onConflict: 'spreadsheet_id,row_hash', ignoreDuplicates: true });
+
+                  if (upsertError) throw new Error(upsertError.message);
+
+                  await supabase.from('sync_job_items').update({ status: 'completed' }).eq('id', item.id);
+                  imported++;
+                } catch (err) {
+                  await supabase.from('sync_job_items').update({
+                    status: 'failed',
+                    error: String(err instanceof Error ? err.message : err)
+                  }).eq('id', item.id);
+                  failed++;
+                }
+                processed++;
+              }
             }
+          } catch (err) {
+            fatalError = String(err instanceof Error ? err.message : err);
           }
 
           // Update job progress
@@ -625,14 +714,42 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             f_inc: failed
           });
 
-          // Check if finished
-          const { data: remaining } = await supabase.from('sync_job_items').select('id').eq('job_id', job.id).eq('status', 'pending').limit(1);
-          if (!remaining || remaining.length === 0) {
-            await supabase.from('sync_jobs').update({ status: 'completed', finished_at: new Date().toISOString() }).eq('id', job.id);
+          if (fatalError) {
+            await supabase.from('sync_jobs').update({
+              status: 'failed',
+              error: fatalError,
+              finished_at: new Date().toISOString()
+            }).eq('id', job.id);
+            await supabase.rpc('release_sync_lock', { p_config_id: config.id });
+            return Response.json({ success: false, error: fatalError, processed, imported, failed, finished: true });
           }
 
-          return new Response(JSON.stringify({ success: true, processed, imported, failed, finished: !remaining || remaining.length === 0 }));
+          // Check if finished
+          const { data: remaining } = await supabase.from('sync_job_items').select('id').eq('job_id', job.id).eq('status', 'pending').limit(1);
+          const finished = !remaining || remaining.length === 0;
+
+          if (finished) {
+            const { data: failedItems } = await supabase
+              .from('sync_job_items')
+              .select('error')
+              .eq('job_id', job.id)
+              .eq('status', 'failed')
+              .limit(1);
+
+            await supabase.from('sync_jobs').update({
+              status: 'completed',
+              finished_at: new Date().toISOString(),
+              error: failedItems?.[0]?.error
+                ? `Concluído com falhas em alguns registros. Primeiro erro: ${failedItems[0].error}`
+                : null
+            }).eq('id', job.id);
+
+            await supabase.rpc('release_sync_lock', { p_config_id: config.id });
+          }
+
+          return Response.json({ success: true, processed, imported, duplicates, failed, finished });
         }
+
 
         return new Response('Invalid mode', { status: 400 });
       }
