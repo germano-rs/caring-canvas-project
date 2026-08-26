@@ -513,12 +513,34 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
   onSave: (config: any) => void;
 }) {
   const [localConfig, setLocalConfig] = useState<any>(null);
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState<SpreadsheetValidation | null>(null);
 
   useEffect(() => {
     if (config) {
       setLocalConfig({ ...config });
+      setValidation(null);
     }
   }, [config, isOpen]);
+
+  const runValidation = async () => {
+    if (!localConfig?.url) {
+      toast.error("Informe a URL da planilha antes de validar.");
+      return;
+    }
+    setValidating(true);
+    try {
+      const report = await validateSpreadsheet({ url: localConfig.url, name: localConfig.name });
+      setValidation(report);
+      if (report.ok && report.warnings.length === 0) toast.success("Planilha validada com sucesso.");
+      else if (report.ok) toast.warning("Planilha válida, com alertas.");
+      else toast.error("Planilha inválida.");
+    } catch (e) {
+      toastError(e, "sync");
+    } finally {
+      setValidating(false);
+    }
+  };
 
   if (!localConfig) return null;
 
@@ -602,7 +624,17 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
           </div>
         </div>
 
+        {validation && (
+          <div className="pb-2">
+            <ValidationReport report={validation} />
+          </div>
+        )}
+
         <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={runValidation} disabled={validating} className="gap-2">
+            {validating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+            Validar planilha
+          </Button>
           <Button variant="outline" onClick={onClose}>
             {isEdit ? "Cancelar" : "Fechar"}
           </Button>
