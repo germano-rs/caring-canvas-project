@@ -458,7 +458,19 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 total_rows: 0
               }).eq('id', job.id);
 
-              // Filter out already imported rows before enqueuing to save space
+              // Registros já lidos são imutáveis: a sincronização só considera as linhas
+              // que estão além da quantidade de registros lida na última sincronização.
+              const lastRowCount = Number(config.last_row_count ?? 0);
+              const newRows = lastRowCount > 0 ? rows.slice(lastRowCount) : rows;
+
+              if (lastRowCount > rows.length) {
+                throw new Error(
+                  `A planilha tem ${rows.length} registros, menos que os ${lastRowCount} já lidos anteriormente. ` +
+                  'Registros já importados são imutáveis — verifique se a planilha correta foi informada ou se linhas foram removidas.'
+                );
+              }
+
+              // Rede de segurança: ignora linhas cujo conteúdo já foi importado
               const { data: importedHashes } = await supabase
                 .from('health_events')
                 .select('row_hash')
@@ -466,7 +478,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
 
               const existingSet = new Set((importedHashes ?? []).map(r => r.row_hash));
 
-              const itemsToEnqueue = rows.map(row => ({
+              const itemsToEnqueue = newRows.map(row => ({
                 job_id: job.id,
                 spreadsheet_id: config.id,
                 row_data: { __headers: headers, row },
@@ -481,11 +493,17 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 }
               }
 
+              // Marca a nova posição de leitura (total de linhas da planilha nesta leitura)
+              await supabase.from('spreadsheet_configs')
+                .update({ last_row_count: rows.length })
+                .eq('id', config.id);
+
               await supabase.from('sync_jobs').update({
                 total_rows: itemsToEnqueue.length,
                 status: itemsToEnqueue.length > 0 ? 'queued' : 'completed',
                 finished_at: itemsToEnqueue.length > 0 ? null : new Date().toISOString()
               }).eq('id', job.id);
+
 
             } catch (err) {
               await supabase.from('sync_jobs').update({

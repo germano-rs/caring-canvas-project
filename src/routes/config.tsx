@@ -280,6 +280,7 @@ function ConfigPage() {
                 <TableHead>Nome</TableHead>
                 <TableHead className="hidden md:table-cell">URL</TableHead>
                 <TableHead>Última Sinc.</TableHead>
+                <TableHead className="hidden md:table-cell">Registros lidos</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -295,6 +296,9 @@ function ConfigPage() {
                     </TableCell>
                     <TableCell className="text-xs">
                       {config.last_sync_at ? new Date(config.last_sync_at).toLocaleString() : 'Nunca'}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-xs" title="Somente linhas além desta posição serão importadas na próxima sincronização">
+                      {config.last_row_count ?? 0}
                     </TableCell>
                     <TableCell>
                       {isActiveJob ? (
@@ -365,7 +369,7 @@ function ConfigPage() {
               })}
               {configs?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic">
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground italic">
                     Nenhuma planilha configurada ainda.
                   </TableCell>
                 </TableRow>
