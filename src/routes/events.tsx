@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchEventsFromDb, fetchSpreadsheetConfigs, type HealthData } from "@/lib/data-service";
+import { fetchEventsFromDb, fetchSpreadsheetConfigs, reprocessEvent, type HealthData } from "@/lib/data-service";
 import { useState, useMemo } from "react";
 import {
   Table,
@@ -34,6 +34,7 @@ import {
   ArrowUpDown,
   Download,
   Eraser,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
@@ -45,6 +46,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { HealthMap } from "@/components/HealthMap";
+import { toast } from "sonner";
+import { toastError } from "@/lib/errors";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -142,6 +145,7 @@ function EventsPage() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [mapEvent, setMapEvent] = useState<HealthData | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   const { data: configs } = useQuery({
@@ -153,6 +157,25 @@ function EventsPage() {
     queryKey: ["healthEvents", spreadsheetId, "all"],
     queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId, undefined, undefined, false),
   });
+
+  const handleReprocess = async (event: HealthData) => {
+    setReprocessingId(event.id);
+    try {
+      const result = await reprocessEvent(event.id);
+      if (result.locationFound) {
+        toast.success(
+          `Registro reprocessado: ${result.latitude?.toFixed(6)}, ${result.longitude?.toFixed(6)}`
+        );
+      } else {
+        toast.warning("Reprocessado, mas nenhuma coordenada foi encontrada para este registro.");
+      }
+      await refetchEvents();
+    } catch (err) {
+      toastError(err, "generic");
+    } finally {
+      setReprocessingId(null);
+    }
+  };
 
   const setFilter = (key: ColumnKey, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -303,6 +326,7 @@ function EventsPage() {
                       </button>
                     </TableHead>
                   ))}
+                  <TableHead className="w-[110px] text-xs font-medium">Ações</TableHead>
                 </TableRow>
                 <TableRow className="bg-muted/10 hover:bg-muted/10">
                   {COLUMNS.map((c) => (
@@ -315,16 +339,17 @@ function EventsPage() {
                       />
                     </TableHead>
                   ))}
+                  <TableHead className="py-1.5" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length} className="text-center py-12 text-muted-foreground italic">Carregando dados...</TableCell>
+                    <TableCell colSpan={COLUMNS.length + 1} className="text-center py-12 text-muted-foreground italic">Carregando dados...</TableCell>
                   </TableRow>
                 ) : paginatedEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length} className="text-center py-12 text-muted-foreground italic">Nenhum registro encontrado.</TableCell>
+                    <TableCell colSpan={COLUMNS.length + 1} className="text-center py-12 text-muted-foreground italic">Nenhum registro encontrado.</TableCell>
                   </TableRow>
                 ) : (
                   paginatedEvents.map((event) => {
@@ -405,6 +430,21 @@ function EventsPage() {
                               Inconsistente
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            disabled={reprocessingId === event.id}
+                            onClick={() => handleReprocess(event)}
+                            title="Reprocessar busca de coordenadas deste registro"
+                          >
+                            <RefreshCw
+                              className={`h-3 w-3 mr-1 ${reprocessingId === event.id ? "animate-spin" : ""}`}
+                            />
+                            {reprocessingId === event.id ? "..." : "Reprocessar"}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
