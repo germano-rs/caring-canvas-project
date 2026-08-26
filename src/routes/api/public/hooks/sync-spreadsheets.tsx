@@ -655,17 +655,42 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                     continue;
                   }
 
+                  let geoSource: string | null = null;
+                  let geoProvider: string | null = null;
+
                   if (config.auto_geocode) {
-                    let geo = null;
+                    let geo: any = null;
                     if (cleanCEP.length === 8) {
                       const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
-                      if (cached) geo = cached;
-                      else {
-                        geo = await serverGeocodeByCEP(cleanCEP);
-                        if (geo) await supabase.from('geocoding_cache').upsert({ cep: cleanCEP, ...geo });
+                      if (cached) {
+                        geo = cached;
+                        geoSource = 'cep';
+                        geoProvider = (cached as any).provider ?? 'cache';
+                      } else {
+                        const fresh = await serverGeocodeByCEP(cleanCEP);
+                        if (fresh) {
+                          geo = fresh;
+                          geoSource = 'cep';
+                          geoProvider = fresh.provider;
+                          await supabase.from('geocoding_cache').upsert({
+                            cep: cleanCEP,
+                            latitude: fresh.latitude,
+                            longitude: fresh.longitude,
+                            bairro: fresh.bairro,
+                            rua: fresh.rua,
+                            provider: fresh.provider
+                          });
+                        }
                       }
                     }
-                    if (!geo) geo = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
+                    if (!geo) {
+                      const byAddress = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
+                      if (byAddress) {
+                        geo = byAddress;
+                        geoSource = 'endereco';
+                        geoProvider = byAddress.provider;
+                      }
+                    }
                     if (geo) { lat = geo.latitude; lon = geo.longitude; }
                   }
 
@@ -687,6 +712,9 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                     latitude: locationFound ? lat : 0,
                     longitude: locationFound ? lon : 0,
                     location_found: locationFound,
+                    geo_source: locationFound ? geoSource : null,
+                    geo_provider: locationFound ? geoProvider : null,
+
                     event_date: parseEventDate(dataNotificacao),
                     event_type: tipoNotificacao,
                     raw_data: row,
