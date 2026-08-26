@@ -19,6 +19,7 @@ import { toastError } from "../lib/errors";
 import { z } from "zod";
 
 const MAX_COMPARISONS = 5;
+const STORAGE_KEY = "dashboard-comparisons-v1";
 
 type Period = { start: string; end: string };
 
