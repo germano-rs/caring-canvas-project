@@ -13,7 +13,7 @@ interface HealthMapProps {
   showMarkers?: boolean;
 }
 
-function MapSwitcher({ data, heatmapPoints, showMarkers }: HealthMapProps) {
+function MapSwitcher({ data, heatmapPoints, showMarkers = false }: HealthMapProps) {
   const { data: settings, isLoading } = useQuery({
     queryKey: ["app-settings"],
     queryFn: () => fetchAppSettings(),
