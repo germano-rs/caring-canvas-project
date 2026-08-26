@@ -347,37 +347,38 @@ function ConfigPage() {
         <CardContent>
           <div className="space-y-4">
             {jobHistory?.map((job: any) => (
-              <div key={job.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  {job.status === 'completed' ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  ) : job.status === 'failed' ? (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  ) : (
-                    <Clock className="w-5 h-5 text-yellow-500" />
-                  )}
-                  <div>
-                    <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(job.created_at).toLocaleString()}
+              <div key={job.id} className="space-y-2">
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    {job.status === 'completed' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : job.status === 'failed' ? (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    ) : (
+                      <Clock className="w-5 h-5 text-yellow-500" />
+                    )}
+                    <div>
+                      <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(job.created_at).toLocaleString()}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold">
-                    {job.imported_rows} importados
+                  <div className="text-right">
+                    <div className="text-sm font-semibold">
+                      {job.imported_rows} importados
+                    </div>
+                    {job.failed_rows > 0 && (
+                      <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
+                    )}
                   </div>
-                  {job.failed_rows > 0 && (
-                    <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
-                  )}
                 </div>
-              </div>
                 {job.status === 'failed' && job.error && (
-                  <div className="px-3 pb-3 -mt-2">
-                    <ErrorDisplay error={new Error(job.error)} context="sync" />
-                  </div>
+                  <ErrorDisplay error={new Error(job.error)} context="sync" />
                 )}
+              </div>
             ))}
+
             {(!jobHistory || jobHistory.length === 0) && (
               <p className="text-center text-muted-foreground py-4">Nenhum histórico disponível.</p>
             )}
