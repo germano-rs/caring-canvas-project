@@ -842,8 +842,114 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           return Response.json({ success: true, processed, imported, duplicates, failed, finished });
         }
 
+        // ---------- Reprocessa um único registro (busca de coordenadas) ----------
+        if (mode === 'reprocess-event') {
+          let body: any = {};
+          try { body = await request.json(); } catch { body = {}; }
+          const eventId: string | null = body?.eventId ?? null;
+          if (!eventId) return Response.json({ success: false, error: 'eventId é obrigatório' }, { status: 400 });
+
+          const { data: event, error: eventError } = await supabase
+            .from('health_events')
+            .select('*')
+            .eq('id', eventId)
+            .maybeSingle();
+
+          if (eventError) return Response.json({ success: false, error: eventError.message }, { status: 500 });
+          if (!event) return Response.json({ success: false, error: 'Registro não encontrado' }, { status: 404 });
+
+          const row = (event as any).raw_data ?? {};
+          const logradouro: string | null = (event as any).rua ?? (event as any).logradouro ?? null;
+          const bairro: string | null = (event as any).bairro ?? null;
+          const cep: string | null = (event as any).cep ?? null;
+          const cleanCEP = cep ? cep.replace(/\D/g, '') : '';
+
+          let lat = NaN;
+          let lon = NaN;
+          let geoSource: string | null = null;
+          let geoProvider: string | null = null;
+
+          try {
+            // Prioridade 1: coordenadas GPS presentes na própria planilha
+            const rowKeys = Object.keys(row ?? {});
+            const latKey = findCoordinateColumn(rowKeys, LATITUDE_ALIASES);
+            const lonKey = findCoordinateColumn(rowKeys, LONGITUDE_ALIASES);
+            if (latKey && lonKey) {
+              const rawLat = parseCoordinate(cell(row, latKey));
+              const rawLon = parseCoordinate(cell(row, lonKey));
+              if (
+                Number.isFinite(rawLat) && Number.isFinite(rawLon) &&
+                rawLat >= -90 && rawLat <= 90 &&
+                rawLon >= -180 && rawLon <= 180 &&
+                !(rawLat === 0 && rawLon === 0)
+              ) {
+                lat = rawLat;
+                lon = rawLon;
+                geoSource = 'coordenadas';
+                geoProvider = 'planilha';
+              }
+            }
+
+            // Prioridade 2: geocoding fresco por CEP (ignora cache) e depois endereço
+            if (!Number.isFinite(lat)) {
+              let geo: any = null;
+              if (cleanCEP.length === 8 && !GENERIC_CEPS.has(cleanCEP)) {
+                const fresh = await serverGeocodeByCEP(cleanCEP);
+                if (fresh) {
+                  geo = fresh;
+                  geoSource = 'cep';
+                  geoProvider = fresh.provider;
+                  await supabase.from('geocoding_cache').upsert({
+                    cep: cleanCEP,
+                    latitude: fresh.latitude,
+                    longitude: fresh.longitude,
+                    bairro: fresh.bairro,
+                    rua: fresh.rua,
+                    provider: fresh.provider
+                  });
+                }
+              }
+              if (!geo) {
+                const byAddress = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
+                if (byAddress) {
+                  geo = byAddress;
+                  geoSource = 'endereco';
+                  geoProvider = byAddress.provider;
+                }
+              }
+              if (geo) { lat = geo.latitude; lon = geo.longitude; }
+            }
+          } catch (err) {
+            return Response.json({
+              success: false,
+              error: String(err instanceof Error ? err.message : err)
+            }, { status: 500 });
+          }
+
+          const locationFound = Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0;
+
+          const { error: updateError } = await supabase.from('health_events').update({
+            latitude: locationFound ? lat : 0,
+            longitude: locationFound ? lon : 0,
+            location_found: locationFound,
+            geo_source: locationFound ? geoSource : null,
+            geo_provider: locationFound ? geoProvider : null,
+          }).eq('id', eventId);
+
+          if (updateError) return Response.json({ success: false, error: updateError.message }, { status: 500 });
+
+          return Response.json({
+            success: true,
+            locationFound,
+            latitude: locationFound ? lat : null,
+            longitude: locationFound ? lon : null,
+            geoSource: locationFound ? geoSource : null,
+            geoProvider: locationFound ? geoProvider : null,
+          });
+        }
 
         return new Response('Invalid mode', { status: 400 });
+
       }
     }
   }
