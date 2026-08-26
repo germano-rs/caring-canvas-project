@@ -9,7 +9,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { LayoutDashboard, Settings, Map as MapIcon, Table as TableIcon, Layout } from "lucide-react";
+import { LayoutDashboard, Settings, Map as MapIcon, Table as TableIcon, Layout, ShieldCheck } from "lucide-react";
 import { Toaster } from "../components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -158,7 +158,7 @@ function RootComponent() {
             
             <Link
               to="/events"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors \${
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                 location.pathname === "/events" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
               }`}
             >
@@ -174,6 +174,16 @@ function RootComponent() {
             >
               <Layout className="w-5 h-5" />
               <span className="hidden md:block">Painéis</span>
+            </Link>
+
+            <Link
+              to="/admin"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                location.pathname === "/admin" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+              }`}
+            >
+              <ShieldCheck className="w-5 h-5" />
+              <span className="hidden md:block">Administrador</span>
             </Link>
           </div>
         </nav>
