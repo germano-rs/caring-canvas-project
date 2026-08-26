@@ -45,6 +45,32 @@ const EXPECTED_HEADERS: Record<keyof typeof COLUMN_POSITIONS, string[]> = {
   cep: ['cep', 'nu_cep'],
 };
 
+// Colunas opcionais de coordenadas GPS presentes na própria planilha.
+// Quando existem e são válidas, têm prioridade sobre o geocoding.
+const LATITUDE_ALIASES = ['latitude', 'lat', 'nu_latitude', 'nu_lat', 'coordenada latitude', 'gps latitude'];
+const LONGITUDE_ALIASES = ['longitude', 'long', 'lon', 'lng', 'nu_longitude', 'nu_long', 'coordenada longitude', 'gps longitude'];
+
+function findCoordinateColumn(headerRow: any[], aliases: string[]): string | null {
+  if (!headerRow) return null;
+  const normalizedAliases = aliases.map(normalizeHeader);
+  for (const raw of headerRow) {
+    if (raw == null) continue;
+    const h = String(raw).trim();
+    const n = normalizeHeader(h);
+    if (normalizedAliases.some(a => n === a || n.includes(a))) return h;
+  }
+  return null;
+}
+
+// Converte " -18,7567 " ou "-18.7567" em número; retorna NaN se inválido
+function parseCoordinate(value: any): number {
+  if (value == null) return NaN;
+  const s = String(value).trim().replace(/\s/g, '').replace(',', '.');
+  if (!s) return NaN;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 
 function normalizeHeader(value: any): string {
   return String(value ?? '')
