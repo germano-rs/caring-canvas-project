@@ -17,6 +17,8 @@ export interface HealthData {
   longitude: number;
   latitude: number;
   location_found: boolean;
+  geo_source: string | null;
+  geo_provider: string | null;
   data: string;
   evento: string | null;
 }
@@ -92,6 +94,8 @@ export async function fetchEventsFromDb(spreadsheetId?: string, startDate?: stri
     longitude: item.longitude,
     latitude: item.latitude,
     location_found: item.location_found ?? (item.latitude !== 0 && item.longitude !== 0),
+    geo_source: item.geo_source ?? null,
+    geo_provider: item.geo_provider ?? null,
     data: item.event_date,
     evento: item.event_type
   }));
