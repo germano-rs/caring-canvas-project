@@ -45,6 +45,32 @@ const EXPECTED_HEADERS: Record<keyof typeof COLUMN_POSITIONS, string[]> = {
   cep: ['cep', 'nu_cep'],
 };
 
+// Colunas opcionais de coordenadas GPS presentes na própria planilha.
+// Quando existem e são válidas, têm prioridade sobre o geocoding.
+const LATITUDE_ALIASES = ['latitude', 'lat', 'nu_latitude', 'nu_lat', 'coordenada latitude', 'gps latitude'];
+const LONGITUDE_ALIASES = ['longitude', 'long', 'lon', 'lng', 'nu_longitude', 'nu_long', 'coordenada longitude', 'gps longitude'];
+
+function findCoordinateColumn(headerRow: any[], aliases: string[]): string | null {
+  if (!headerRow) return null;
+  const normalizedAliases = aliases.map(normalizeHeader);
+  for (const raw of headerRow) {
+    if (raw == null) continue;
+    const h = String(raw).trim();
+    const n = normalizeHeader(h);
+    if (normalizedAliases.some(a => n === a || n.includes(a))) return h;
+  }
+  return null;
+}
+
+// Converte " -18,7567 " ou "-18.7567" em número; retorna NaN se inválido
+function parseCoordinate(value: any): number {
+  if (value == null) return NaN;
+  const s = String(value).trim().replace(/\s/g, '').replace(',', '.');
+  if (!s) return NaN;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 
 function normalizeHeader(value: any): string {
   return String(value ?? '')
@@ -75,6 +101,14 @@ function readHeaders(headerRow: any[]): { headers: Record<string, string>; error
     if (!expected.some(e => normalized.includes(e) || e.includes(normalized))) {
       errors.push(`Coluna ${indexToExcelLetter(idx)}: esperado algo como "${EXPECTED_HEADERS[key][0]}", encontrado "${header}"`);
     }
+  }
+
+  // Detecta colunas opcionais de coordenadas GPS (não geram erro se ausentes)
+  const latHeader = findCoordinateColumn(headerRow, LATITUDE_ALIASES);
+  const lonHeader = findCoordinateColumn(headerRow, LONGITUDE_ALIASES);
+  if (latHeader && lonHeader) {
+    headers['latitude'] = latHeader;
+    headers['longitude'] = lonHeader;
   }
 
   return { headers, errors };
@@ -658,7 +692,25 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                   let geoSource: string | null = null;
                   let geoProvider: string | null = null;
 
-                  if (config.auto_geocode) {
+                  // Prioridade 1: coordenadas GPS presentes no próprio registro
+                  if (headers['latitude'] && headers['longitude']) {
+                    const rawLat = parseCoordinate(cell(row, headers['latitude']));
+                    const rawLon = parseCoordinate(cell(row, headers['longitude']));
+                    if (
+                      Number.isFinite(rawLat) && Number.isFinite(rawLon) &&
+                      rawLat >= -90 && rawLat <= 90 &&
+                      rawLon >= -180 && rawLon <= 180 &&
+                      !(rawLat === 0 && rawLon === 0)
+                    ) {
+                      lat = rawLat;
+                      lon = rawLon;
+                      geoSource = 'coordenadas';
+                      geoProvider = 'planilha';
+                    }
+                  }
+
+                  // Prioridade 2: geocoding por CEP/endereço
+                  if (!Number.isFinite(lat) && config.auto_geocode) {
                     let geo: any = null;
                     if (cleanCEP.length === 8) {
                       const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();

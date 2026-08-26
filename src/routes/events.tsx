@@ -80,6 +80,7 @@ const COLUMNS: { key: ColumnKey; label: string; width?: string }[] = [
 const SOURCE_LABEL: Record<string, string> = {
   cep: "CEP",
   endereco: "Endereço",
+  coordenadas: "Coordenadas GPS",
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -87,6 +88,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   nominatim: "Nominatim (OSM)",
   photon: "Photon (Komoot)",
   cache: "Cache",
+  planilha: "Planilha",
 };
 
 function sourceLabel(v: string | null) {
