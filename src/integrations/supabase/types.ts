@@ -77,6 +77,59 @@ export type Database = {
         }
         Relationships: []
       }
+      event_geocode_history: {
+        Row: {
+          api_response: Json | null
+          created_at: string
+          error: string | null
+          event_id: string
+          found_address: string | null
+          geo_provider: string | null
+          geo_source: string | null
+          id: string
+          latitude: number | null
+          location_found: boolean
+          longitude: number | null
+          query_payload: Json | null
+        }
+        Insert: {
+          api_response?: Json | null
+          created_at?: string
+          error?: string | null
+          event_id: string
+          found_address?: string | null
+          geo_provider?: string | null
+          geo_source?: string | null
+          id?: string
+          latitude?: number | null
+          location_found?: boolean
+          longitude?: number | null
+          query_payload?: Json | null
+        }
+        Update: {
+          api_response?: Json | null
+          created_at?: string
+          error?: string | null
+          event_id?: string
+          found_address?: string | null
+          geo_provider?: string | null
+          geo_source?: string | null
+          id?: string
+          latitude?: number | null
+          location_found?: boolean
+          longitude?: number | null
+          query_payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_geocode_history_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "health_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geocoding_cache: {
         Row: {
           bairro: string | null
