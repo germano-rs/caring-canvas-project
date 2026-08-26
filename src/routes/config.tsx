@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
-import { toastError, describeError } from "@/lib/errors";
+import { toastError } from "@/lib/errors";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,

@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
+import { ErrorDisplay } from "../components/ErrorDisplay";
+import { toastError } from "../lib/errors";
 import { z } from "zod";
 
 const dashboardSearchSchema = z.object({
@@ -80,8 +82,8 @@ function Dashboard() {
       toast.success("Painel salvo com sucesso!");
       setIsSaveModalOpen(false);
     },
-    onError: () => {
-      toast.error("Erro ao salvar painel.");
+    onError: (error: unknown) => {
+      toastError(error, "save-panel");
     }
   });
 
@@ -130,7 +132,7 @@ function Dashboard() {
     queryFn: () => fetchSpreadsheetConfigs(),
   });
 
-  const { data: data1, isLoading: isLoading1, error: error1 } = useQuery({
+  const { data: data1, isLoading: isLoading1, error: error1, refetch: refetch1 } = useQuery({
     queryKey: ["healthEvents", config1, start1, end1],
     queryFn: () =>
       fetchEventsFromDb(config1 === "all" ? undefined : config1, toStart(start1), toEnd(end1), true),
@@ -173,13 +175,7 @@ function Dashboard() {
   if (error1) {
     return (
       <div className="p-8">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erro ao carregar dados</AlertTitle>
-          <AlertDescription>
-            Não foi possível carregar os dados do banco. Verifique a configuração das planilhas.
-          </AlertDescription>
-        </Alert>
+        <ErrorDisplay error={error1} context="load-events" onRetry={() => refetch1()} />
       </div>
     );
   }

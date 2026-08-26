@@ -33,6 +33,7 @@ import {
   ArrowUpDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ErrorDisplay } from "@/components/ErrorDisplay";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -50,7 +51,7 @@ function EventsPage() {
     queryFn: () => fetchSpreadsheetConfigs(),
   });
 
-  const { data: events, isLoading } = useQuery({
+  const { data: events, isLoading, error: eventsError, refetch: refetchEvents } = useQuery({
     queryKey: ["healthEvents", spreadsheetId, "all"],
     queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId, undefined, undefined, false),
   });
