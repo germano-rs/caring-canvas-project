@@ -22,6 +22,8 @@ import {
   Plus
 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorDisplay } from "@/components/ErrorDisplay";
+import { toastError } from "@/lib/errors";
 import { useState } from "react";
 
 export const Route = createFileRoute("/panels")({
@@ -34,7 +36,7 @@ function PanelsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const { data: panels, isLoading } = useQuery({
+  const { data: panels, isLoading, error: panelsError, refetch: refetchPanels } = useQuery({
     queryKey: ["savedPanels"],
     queryFn: fetchSavedPanels,
   });
@@ -45,8 +47,8 @@ function PanelsPage() {
       queryClient.invalidateQueries({ queryKey: ["savedPanels"] });
       toast.success("Painel excluído com sucesso.");
     },
-    onError: () => {
-      toast.error("Erro ao excluir painel.");
+    onError: (error: unknown) => {
+      toastError(error, "delete-panel");
     }
   });
 
@@ -76,6 +78,10 @@ function PanelsPage() {
           Novo Painel
         </Button>
       </header>
+
+      {panelsError && (
+        <ErrorDisplay error={panelsError} context="generic" onRetry={() => refetchPanels()} />
+      )}
 
       <Card>
         <CardHeader className="pb-2 border-b">

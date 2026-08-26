@@ -33,6 +33,7 @@ import {
   ArrowUpDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ErrorDisplay } from "@/components/ErrorDisplay";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
@@ -50,7 +51,7 @@ function EventsPage() {
     queryFn: () => fetchSpreadsheetConfigs(),
   });
 
-  const { data: events, isLoading } = useQuery({
+  const { data: events, isLoading, error: eventsError, refetch: refetchEvents } = useQuery({
     queryKey: ["healthEvents", spreadsheetId, "all"],
     queryFn: () => fetchEventsFromDb(spreadsheetId === "all" ? undefined : spreadsheetId, undefined, undefined, false),
   });
@@ -105,6 +106,10 @@ function EventsPage() {
           </Select>
         </div>
       </header>
+
+      {eventsError && (
+        <ErrorDisplay error={eventsError} context="load-events" onRetry={() => refetchEvents()} />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="relative">

@@ -54,6 +54,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { ErrorDisplay } from "@/components/ErrorDisplay";
+import { toastError } from "@/lib/errors";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -72,7 +74,7 @@ function ConfigPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
 
-  const { data: configs, isLoading } = useQuery({
+  const { data: configs, isLoading, error: configsError, refetch: refetchConfigs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
     queryFn: fetchSpreadsheetConfigs,
   });
@@ -99,8 +101,8 @@ function ConfigPage() {
       toast.success("Configuração salva com sucesso!");
       setIsDialogOpen(false);
     },
-    onError: (error: any) => {
-      toast.error(`Erro ao salvar: ${error.message}`);
+    onError: (error: unknown) => {
+      toastError(error, "save-config");
     },
   });
 
@@ -109,6 +111,9 @@ function ConfigPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
       toast.success("Planilha removida.");
+    },
+    onError: (error: unknown) => {
+      toastError(error, "delete-config");
     },
   });
 
@@ -137,7 +142,7 @@ function ConfigPage() {
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
       queryClient.invalidateQueries({ queryKey: ["activeJobs"] });
     } catch (e) {
-      toast.error("Falha ao iniciar sincronização.");
+      toastError(e, "sync");
     } finally {
       setIsSyncing(null);
     }
@@ -165,10 +170,15 @@ function ConfigPage() {
           `Localizado: Lat ${result.latitude.toFixed(4)}, Lon ${result.longitude.toFixed(4)} ${result.bairro ? `(${result.bairro})` : ""}`
         );
       } else {
-        toast.error("Não foi possível geolocalizar com os dados fornecidos.");
+        toastError(
+          new Error(
+            `Nenhuma coordenada encontrada para ${[testCep && `CEP ${testCep}`, testRua, testBairro].filter(Boolean).join(" / ")}.`
+          ),
+          "geocode"
+        );
       }
     } catch (error) {
-      toast.error("Erro ao testar geolocalização.");
+      toastError(error, "geocode");
     } finally {
       setIsTesting(false);
     }
@@ -190,6 +200,10 @@ function ConfigPage() {
           Adicionar Planilha
         </Button>
       </div>
+
+      {configsError && (
+        <ErrorDisplay error={configsError} context="load-configs" onRetry={() => refetchConfigs()} />
+      )}
 
       {activeJobs && activeJobs.length > 0 && (
         <div className="space-y-4">
@@ -333,32 +347,38 @@ function ConfigPage() {
         <CardContent>
           <div className="space-y-4">
             {jobHistory?.map((job: any) => (
-              <div key={job.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  {job.status === 'completed' ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  ) : job.status === 'failed' ? (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  ) : (
-                    <Clock className="w-5 h-5 text-yellow-500" />
-                  )}
-                  <div>
-                    <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(job.created_at).toLocaleString()}
+              <div key={job.id} className="space-y-2">
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    {job.status === 'completed' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : job.status === 'failed' ? (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    ) : (
+                      <Clock className="w-5 h-5 text-yellow-500" />
+                    )}
+                    <div>
+                      <div className="font-medium text-sm">{job.spreadsheet_configs?.name || "Global Sync"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(job.created_at).toLocaleString()}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold">
-                    {job.imported_rows} importados
+                  <div className="text-right">
+                    <div className="text-sm font-semibold">
+                      {job.imported_rows} importados
+                    </div>
+                    {job.failed_rows > 0 && (
+                      <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
+                    )}
                   </div>
-                  {job.failed_rows > 0 && (
-                    <div className="text-xs text-red-500">{job.failed_rows} falhas</div>
-                  )}
                 </div>
+                {job.status === 'failed' && job.error && (
+                  <ErrorDisplay error={new Error(job.error)} context="sync" />
+                )}
               </div>
             ))}
+
             {(!jobHistory || jobHistory.length === 0) && (
               <p className="text-center text-muted-foreground py-4">Nenhum histórico disponível.</p>
             )}

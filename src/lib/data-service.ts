@@ -109,7 +109,13 @@ export async function triggerManualSync(configId?: string) {
       'Authorization': `Bearer ${token}`
     }
   });
-  const enqueueResult = await enqueueResponse.json();
+  if (!enqueueResponse.ok) {
+    const body = await enqueueResponse.text();
+    throw new Error(
+      `Falha ao enfileirar a sincronização (HTTP ${enqueueResponse.status}). ${body.slice(0, 300)}`
+    );
+  }
+  await enqueueResponse.json().catch(() => null);
 
   // 2. Process in batches
   let totalProcessed = 0;
@@ -124,11 +130,35 @@ export async function triggerManualSync(configId?: string) {
       }
     });
 
-    const last = await response.json();
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `Falha ao processar o lote de registros (HTTP ${response.status}). ${body.slice(0, 300)}`
+      );
+    }
+
+    const last = await response.json().catch(() => null);
     totalProcessed += (last?.processed ?? 0);
     totalImported += (last?.imported ?? 0);
 
     if (last?.finished || !last?.processed) break;
+  }
+
+  // Se algum job desta planilha falhou, propaga a mensagem detalhada para a tela
+  const failedQuery = supabase
+    .from("sync_jobs")
+    .select("error, spreadsheet_id")
+    .eq("status", "failed")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const { data: failedJobs } = configId
+    ? await failedQuery.eq("spreadsheet_id", configId)
+    : await failedQuery;
+
+  const failure = failedJobs?.[0];
+  if (failure?.error && totalImported === 0) {
+    throw new Error(failure.error);
   }
 
   return { success: true, totalProcessed, totalImported };
