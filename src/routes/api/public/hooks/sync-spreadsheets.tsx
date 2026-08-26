@@ -692,7 +692,25 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                   let geoSource: string | null = null;
                   let geoProvider: string | null = null;
 
-                  if (config.auto_geocode) {
+                  // Prioridade 1: coordenadas GPS presentes no próprio registro
+                  if (headers['latitude'] && headers['longitude']) {
+                    const rawLat = parseCoordinate(cell(row, headers['latitude']));
+                    const rawLon = parseCoordinate(cell(row, headers['longitude']));
+                    if (
+                      Number.isFinite(rawLat) && Number.isFinite(rawLon) &&
+                      rawLat >= -90 && rawLat <= 90 &&
+                      rawLon >= -180 && rawLon <= 180 &&
+                      !(rawLat === 0 && rawLon === 0)
+                    ) {
+                      lat = rawLat;
+                      lon = rawLon;
+                      geoSource = 'coordenadas';
+                      geoProvider = 'planilha';
+                    }
+                  }
+
+                  // Prioridade 2: geocoding por CEP/endereço
+                  if (!Number.isFinite(lat) && config.auto_geocode) {
                     let geo: any = null;
                     if (cleanCEP.length === 8) {
                       const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
