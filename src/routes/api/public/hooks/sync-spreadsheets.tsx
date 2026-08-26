@@ -30,19 +30,21 @@ const COLUMN_POSITIONS = {
   cep: 36,               // AK
 } as const;
 
+// Aceita tanto os títulos descritivos quanto os códigos do SINAN (NU_NOTIFIC, TP_NOT, ...)
 const EXPECTED_HEADERS: Record<keyof typeof COLUMN_POSITIONS, string[]> = {
-  numeroNotificacao: ['numero da notificacao', 'número da notificação', 'num notificacao'],
-  tipoNotificacao: ['tipo da notificacao', 'tipo da notificação', 'tipo'],
-  dataNotificacao: ['data da notificacao', 'data da notificação', 'data notificacao'],
-  anoNotificacao: ['ano da notificacao', 'ano da notificação', 'ano'],
-  idUnidade: ['id da unidade', 'id unidade', 'unidade'],
-  dataNascimento: ['data de nascimento', 'data nascimento', 'nascimento'],
-  sexo: ['sexo'],
-  gestante: ['gestante'],
-  bairro: ['nome do bairro', 'bairro'],
-  logradouro: ['nome do logradouro', 'logradouro'],
-  cep: ['cep'],
+  numeroNotificacao: ['numero da notificacao', 'número da notificação', 'num notificacao', 'nu_notific'],
+  tipoNotificacao: ['tipo da notificacao', 'tipo da notificação', 'tipo', 'tp_not'],
+  dataNotificacao: ['data da notificacao', 'data da notificação', 'data notificacao', 'dt_notific'],
+  anoNotificacao: ['ano da notificacao', 'ano da notificação', 'ano', 'nu_ano'],
+  idUnidade: ['id da unidade', 'id unidade', 'unidade', 'id_unidade'],
+  dataNascimento: ['data de nascimento', 'data nascimento', 'nascimento', 'dt_nasc'],
+  sexo: ['sexo', 'cs_sexo'],
+  gestante: ['gestante', 'cs_gestant'],
+  bairro: ['nome do bairro', 'bairro', 'nm_bairro'],
+  logradouro: ['nome do logradouro', 'logradouro', 'nm_logrado'],
+  cep: ['cep', 'nu_cep'],
 };
+
 
 function normalizeHeader(value: any): string {
   return String(value ?? '')
