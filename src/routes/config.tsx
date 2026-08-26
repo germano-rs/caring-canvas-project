@@ -484,17 +484,18 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
               O sistema lê o cabeçalho (primeira linha) e extrai os dados das seguintes colunas:
             </p>
             <ul className="text-xs text-muted-foreground grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4">
-              <li><strong>A:</strong> Número da Notificação</li>
-              <li><strong>B:</strong> Tipo da Notificação</li>
-              <li><strong>D:</strong> Data da Notificação</li>
-              <li><strong>F:</strong> Ano da Notificação</li>
-              <li><strong>J:</strong> ID da Unidade</li>
-              <li><strong>N:</strong> Data de Nascimento</li>
-              <li><strong>R:</strong> Sexo</li>
-              <li><strong>S:</strong> Gestante</li>
-              <li><strong>AC:</strong> Nome do Bairro</li>
-              <li><strong>AE:</strong> Nome do Logradouro</li>
-              <li><strong>AK:</strong> CEP</li>
+              <li><strong>A:</strong> Número da Notificação (NU_NOTIFIC)</li>
+              <li><strong>B:</strong> Tipo da Notificação (TP_NOT)</li>
+              <li><strong>D:</strong> Data da Notificação (DT_NOTIFIC)</li>
+              <li><strong>F:</strong> Ano da Notificação (NU_ANO)</li>
+              <li><strong>J:</strong> ID da Unidade (ID_UNIDADE)</li>
+              <li><strong>N:</strong> Data de Nascimento (DT_NASC)</li>
+              <li><strong>R:</strong> Sexo (CS_SEXO)</li>
+              <li><strong>S:</strong> Gestante (CS_GESTANT)</li>
+              <li><strong>AC:</strong> Nome do Bairro (NM_BAIRRO)</li>
+              <li><strong>AE:</strong> Nome do Logradouro (NM_LOGRADO)</li>
+              <li><strong>AK:</strong> CEP (NU_CEP)</li>
+
             </ul>
             <p className="text-xs text-muted-foreground">
               Se o cabeçalho não corresponder a essa estrutura, a sincronização falhará com uma mensagem de erro indicando a coluna incorreta.
