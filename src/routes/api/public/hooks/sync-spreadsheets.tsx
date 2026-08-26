@@ -139,37 +139,40 @@ async function queryGoogleGeocoding(queryString: string, apiKey: string): Promis
   }
 }
 
-async function runGeocodingQuery(queryString: string): Promise<any> {
+async function runGeocodingQuery(queryString: string): Promise<{ data: any; provider: string } | null> {
   if (geoSettings.provider === 'google' && geoSettings.key) {
-    const data = await queryGoogleGeocoding(queryString, geoSettings.key);
-    if (data && data.length > 0) return data;
+    const google = await queryGoogleGeocoding(queryString, geoSettings.key);
+    if (google && google.length > 0) return { data: google, provider: 'google' };
   }
-  let data = await queryNominatim(queryString);
-  if (!data || data.length === 0) data = await queryPhoton(queryString);
-  return data;
+  const nominatim = await queryNominatim(queryString);
+  if (nominatim && nominatim.length > 0) return { data: nominatim, provider: 'nominatim' };
+  const photon = await queryPhoton(queryString);
+  if (photon && photon.length > 0) return { data: photon, provider: 'photon' };
+  return null;
 }
 
-async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
+async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<(GeocodingResult & { provider: string }) | null> {
   const tryQueries: string[] = [];
   if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
   if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
   if (bairro) tryQueries.push(`${bairro}, ${cidade} - ${uf}, Brazil`);
 
   for (const query of tryQueries) {
-    const data = await runGeocodingQuery(query);
-    if (data && data.length > 0) {
+    const res = await runGeocodingQuery(query);
+    if (res) {
       return {
-        latitude: parseFloat(data[0].lat),
-        longitude: parseFloat(data[0].lon),
+        latitude: parseFloat(res.data[0].lat),
+        longitude: parseFloat(res.data[0].lon),
         bairro: bairro || null,
-        rua: rua || null
+        rua: rua || null,
+        provider: res.provider
       };
     }
   }
   return null;
 }
 
-async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> {
+async function serverGeocodeByCEP(cep: string): Promise<(GeocodingResult & { provider: string }) | null> {
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
   try {
@@ -179,13 +182,14 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
     const { logradouro, bairro, localidade, uf } = viaCepData;
     let result = await geocodeByAddress(logradouro, bairro, localidade, uf);
     if (!result) {
-      const fallbackData = await runGeocodingQuery(`${cleanCEP}, Brazil`);
-      if (fallbackData && fallbackData.length > 0) {
+      const fallback = await runGeocodingQuery(`${cleanCEP}, Brazil`);
+      if (fallback) {
         result = {
-          latitude: parseFloat(fallbackData[0].lat),
-          longitude: parseFloat(fallbackData[0].lon),
+          latitude: parseFloat(fallback.data[0].lat),
+          longitude: parseFloat(fallback.data[0].lon),
           bairro: bairro || null,
-          rua: logradouro || null
+          rua: logradouro || null,
+          provider: fallback.provider
         };
       }
     }
@@ -194,6 +198,7 @@ async function serverGeocodeByCEP(cep: string): Promise<GeocodingResult | null> 
     return null;
   }
 }
+
 
 function parseEventDate(value: any): string {
   if (!value) return new Date().toISOString();
