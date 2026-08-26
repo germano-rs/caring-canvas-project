@@ -35,7 +35,8 @@ import {
   Clock,
   Eye,
   Edit,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
@@ -71,6 +72,8 @@ function ConfigPage() {
   const [testBairro, setTestBairro] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState<string | null>(null);
+  const [validations, setValidations] = useState<Record<string, SpreadsheetValidation>>({});
   
   // Modal state
   const [selectedConfig, setSelectedConfig] = useState<any | null>(null);
@@ -137,9 +140,42 @@ function ConfigPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSync = async (id: string) => {
+  const handleValidate = async (config: any) => {
+    setIsValidating(config.id);
+    try {
+      const report = await validateSpreadsheet({ configId: config.id, url: config.url, name: config.name });
+      setValidations((prev) => ({ ...prev, [config.id]: report }));
+      if (report.ok && report.warnings.length === 0) {
+        toast.success("Planilha validada: estrutura e acesso corretos.");
+      } else if (report.ok) {
+        toast.warning(`Planilha válida, mas com ${report.warnings.length} alerta(s). Veja os detalhes abaixo da tabela.`);
+      } else {
+        toast.error("Planilha inválida. Veja os detalhes abaixo da tabela.");
+      }
+      return report;
+    } catch (e) {
+      toastError(e, "sync");
+      return null;
+    } finally {
+      setIsValidating(null);
+    }
+  };
+
+  const handleSync = async (config: any) => {
+    const id = config.id;
     setIsSyncing(id);
     try {
+      // Validação prévia: evita iniciar a sincronização quando a planilha está inacessível
+      // ou o cabeçalho não corresponde ao formato esperado.
+      const report = await validateSpreadsheet({ configId: id, url: config.url, name: config.name });
+      setValidations((prev) => ({ ...prev, [id]: report }));
+      if (!report.ok) {
+        toast.error("Sincronização cancelada: a planilha não passou na validação prévia.");
+        return;
+      }
+      if (report.warnings.length > 0) {
+        toast.warning(`Validação concluída com ${report.warnings.length} alerta(s). Sincronizando...`);
+      }
       await triggerManualSync(id);
       toast.success("Sincronização iniciada!");
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
@@ -292,9 +328,20 @@ function ConfigPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => handleSync(config.id)} 
+                          onClick={() => handleValidate(config)}
+                          disabled={isValidating === config.id || isSyncing === config.id}
+                          title="Validar planilha (cabeçalho, colunas e acesso)"
+                        >
+                          {isValidating === config.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <ShieldCheck className="w-4 h-4" />}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleSync(config)} 
                           disabled={isSyncing === config.id || isActiveJob}
-                          title="Sincronizar"
+                          title="Validar e sincronizar"
                         >
                           <RefreshCw className={`w-4 h-4 ${(isSyncing === config.id || isActiveJob) ? 'animate-spin' : ''}`} />
                         </Button>
