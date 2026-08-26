@@ -7,8 +7,11 @@ import {
   deleteSpreadsheetConfig, 
   triggerManualSync, 
   fetchActiveJobs, 
-  fetchJobHistory 
+  fetchJobHistory,
+  validateSpreadsheet,
+  type SpreadsheetValidation
 } from "@/lib/data-service";
+import { ValidationReport } from "@/components/ValidationReport";
 import { 
   Card, 
   CardContent, 
