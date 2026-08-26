@@ -185,6 +185,71 @@ async function runGeocodingQuery(queryString: string): Promise<{ data: any; prov
   return null;
 }
 
+// Versão instrumentada: devolve também o endereço encontrado e a resposta bruta da API
+async function runGeocodingQueryTraced(queryString: string): Promise<{
+  provider: string;
+  latitude: number;
+  longitude: number;
+  address: string | null;
+  raw: any;
+} | null> {
+  if (geoSettings.provider === 'google' && geoSettings.key) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(queryString)}&region=br&key=${encodeURIComponent(geoSettings.key)}`;
+      const response = await fetch(url);
+      const data: any = response.ok ? await response.json() : null;
+      if (data?.status === 'OK' && data.results?.length) {
+        const first = data.results[0];
+        return {
+          provider: 'google',
+          latitude: first.geometry.location.lat,
+          longitude: first.geometry.location.lng,
+          address: first.formatted_address ?? null,
+          raw: first,
+        };
+      }
+    } catch { /* segue para os próximos provedores */ }
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryString)}&limit=1&addressdetails=1`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'HealthHeatmapApp/1.0' } });
+    const data: any = response.ok ? await response.json() : null;
+    if (Array.isArray(data) && data.length > 0) {
+      return {
+        provider: 'nominatim',
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+        address: data[0].display_name ?? null,
+        raw: data[0],
+      };
+    }
+  } catch { /* segue para o próximo provedor */ }
+
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryString)}&limit=1`;
+    const response = await fetch(url);
+    const data: any = response.ok ? await response.json() : null;
+    const feat = data?.features?.[0];
+    if (feat) {
+      const p = feat.properties ?? {};
+      const address = [p.name, p.street, p.district, p.city, p.state, p.country]
+        .filter(Boolean)
+        .join(', ') || null;
+      return {
+        provider: 'photon',
+        latitude: feat.geometry.coordinates[1],
+        longitude: feat.geometry.coordinates[0],
+        address,
+        raw: feat,
+      };
+    }
+  } catch { /* sem resultado */ }
+
+  return null;
+}
+
+
 // CEPs genéricos (cidade inteira) que não devem ser usados para geocoding
 const GENERIC_CEPS = new Set(['35790000']);
 
@@ -868,6 +933,18 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           let lon = NaN;
           let geoSource: string | null = null;
           let geoProvider: string | null = null;
+          let foundAddress: string | null = null;
+          let apiResponse: any = null;
+          let historyError: string | null = null;
+          const payload: any = {
+            cep: cep ?? null,
+            cep_limpo: cleanCEP || null,
+            logradouro: logradouro ?? null,
+            bairro: bairro ?? null,
+            cidade: 'Curvelo',
+            uf: 'MG',
+            consultas: [] as any[],
+          };
 
           try {
             // Prioridade 1: coordenadas GPS presentes na própria planilha
@@ -877,6 +954,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
             if (latKey && lonKey) {
               const rawLat = parseCoordinate(cell(row, latKey));
               const rawLon = parseCoordinate(cell(row, lonKey));
+              payload.gps_planilha = { coluna_lat: latKey, coluna_lon: lonKey, valor_lat: rawLat, valor_lon: rawLon };
               if (
                 Number.isFinite(rawLat) && Number.isFinite(rawLon) &&
                 rawLat >= -90 && rawLat <= 90 &&
@@ -887,46 +965,87 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                 lon = rawLon;
                 geoSource = 'coordenadas';
                 geoProvider = 'planilha';
+                foundAddress = [logradouro, bairro, 'Curvelo - MG'].filter(Boolean).join(', ');
+                apiResponse = { origem: 'planilha', latitude: lat, longitude: lon };
               }
             }
 
-            // Prioridade 2: geocoding fresco por CEP (ignora cache) e depois endereço
+            // Prioridade 2: geocoding fresco (ignora cache), primeiro por CEP e depois por logradouro
             if (!Number.isFinite(lat)) {
-              let geo: any = null;
+              const candidates: { source: string; query: string }[] = [];
+
               if (cleanCEP.length === 8 && !GENERIC_CEPS.has(cleanCEP)) {
-                const fresh = await serverGeocodeByCEP(cleanCEP);
-                if (fresh) {
-                  geo = fresh;
-                  geoSource = 'cep';
-                  geoProvider = fresh.provider;
-                  await supabase.from('geocoding_cache').upsert({
-                    cep: cleanCEP,
-                    latitude: fresh.latitude,
-                    longitude: fresh.longitude,
-                    bairro: fresh.bairro,
-                    rua: fresh.rua,
-                    provider: fresh.provider
-                  });
+                try {
+                  const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
+                  const viaCepData: any = await viaCepResponse.json();
+                  payload.viacep = viaCepData;
+                  if (viaCepData && !viaCepData.erro) {
+                    if (viaCepData.logradouro) {
+                      candidates.push({ source: 'cep', query: `${viaCepData.logradouro}, ${viaCepData.bairro || bairro || ''}, Curvelo - MG, Brazil`.replace(', ,', ',') });
+                    }
+                    candidates.push({ source: 'cep', query: `${cleanCEP}, Brazil` });
+                  }
+                } catch (e) {
+                  payload.viacep_erro = String(e instanceof Error ? e.message : e);
                 }
               }
-              if (!geo) {
-                const byAddress = await geocodeByAddress(logradouro ?? undefined, bairro ?? undefined);
-                if (byAddress) {
-                  geo = byAddress;
-                  geoSource = 'endereco';
-                  geoProvider = byAddress.provider;
+
+              if (logradouro && bairro) candidates.push({ source: 'endereco', query: `${logradouro}, ${bairro}, Curvelo - MG, Brazil` });
+              if (logradouro) candidates.push({ source: 'endereco', query: `${logradouro}, Curvelo - MG, Brazil` });
+              if (bairro) candidates.push({ source: 'endereco', query: `${bairro}, Curvelo - MG, Brazil` });
+
+              for (const candidate of candidates) {
+                const res = await runGeocodingQueryTraced(candidate.query);
+                payload.consultas.push({
+                  origem: candidate.source,
+                  consulta: candidate.query,
+                  encontrado: !!res,
+                  provedor: res?.provider ?? null,
+                });
+                if (res) {
+                  lat = res.latitude;
+                  lon = res.longitude;
+                  geoSource = candidate.source;
+                  geoProvider = res.provider;
+                  foundAddress = res.address;
+                  apiResponse = res.raw;
+                  break;
                 }
               }
-              if (geo) { lat = geo.latitude; lon = geo.longitude; }
+
+              if (Number.isFinite(lat) && geoSource === 'cep') {
+                await supabase.from('geocoding_cache').upsert({
+                  cep: cleanCEP,
+                  latitude: lat,
+                  longitude: lon,
+                  bairro: bairro,
+                  rua: logradouro,
+                  provider: geoProvider,
+                });
+              }
             }
           } catch (err) {
-            return Response.json({
-              success: false,
-              error: String(err instanceof Error ? err.message : err)
-            }, { status: 500 });
+            historyError = String(err instanceof Error ? err.message : err);
           }
 
-          const locationFound = Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0;
+          const locationFound = !historyError && Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0;
+
+          await supabase.from('event_geocode_history').insert({
+            event_id: eventId,
+            geo_source: locationFound ? geoSource : null,
+            geo_provider: locationFound ? geoProvider : null,
+            query_payload: payload,
+            api_response: locationFound ? apiResponse : null,
+            found_address: locationFound ? foundAddress : null,
+            latitude: locationFound ? lat : null,
+            longitude: locationFound ? lon : null,
+            location_found: locationFound,
+            error: historyError,
+          });
+
+          if (historyError) {
+            return Response.json({ success: false, error: historyError }, { status: 500 });
+          }
 
           const { error: updateError } = await supabase.from('health_events').update({
             latitude: locationFound ? lat : 0,
@@ -937,6 +1056,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
           }).eq('id', eventId);
 
           if (updateError) return Response.json({ success: false, error: updateError.message }, { status: 500 });
+
 
           return Response.json({
             success: true,

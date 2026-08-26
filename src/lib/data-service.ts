@@ -321,3 +321,30 @@ export async function reprocessEvent(eventId: string): Promise<ReprocessEventRes
   }
   return body as ReprocessEventResult;
 }
+
+export interface EventGeocodeHistoryEntry {
+  id: string;
+  event_id: string;
+  geo_source: string | null;
+  geo_provider: string | null;
+  query_payload: any;
+  api_response: any;
+  found_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_found: boolean;
+  error: string | null;
+  created_at: string;
+}
+
+export async function fetchEventGeocodeHistory(eventId: string): Promise<EventGeocodeHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("event_geocode_history")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return (data ?? []) as unknown as EventGeocodeHistoryEntry[];
+}
