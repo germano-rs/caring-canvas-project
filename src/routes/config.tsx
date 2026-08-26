@@ -90,11 +90,14 @@ function ConfigPage() {
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState<string | null>(null);
   const [validations, setValidations] = useState<Record<string, SpreadsheetValidation>>({});
+  const [isResetting, setIsResetting] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<any | null>(null);
   
   // Modal state
   const [selectedConfig, setSelectedConfig] = useState<any | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
+
 
   const { data: configs, isLoading, error: configsError, refetch: refetchConfigs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
