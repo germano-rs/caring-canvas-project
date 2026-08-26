@@ -47,6 +47,33 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          geocoding_provider: string
+          google_geocoding_api_key: string | null
+          google_maps_api_key: string | null
+          id: string
+          map_provider: string
+          updated_at: string
+        }
+        Insert: {
+          geocoding_provider?: string
+          google_geocoding_api_key?: string | null
+          google_maps_api_key?: string | null
+          id?: string
+          map_provider?: string
+          updated_at?: string
+        }
+        Update: {
+          geocoding_provider?: string
+          google_geocoding_api_key?: string | null
+          google_maps_api_key?: string | null
+          id?: string
+          map_provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       geocoding_cache: {
         Row: {
           bairro: string | null

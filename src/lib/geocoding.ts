@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAppSettings } from "@/lib/settings";
 
 export interface GeocodingResult {
   latitude: number;
@@ -72,6 +73,50 @@ export async function queryPhoton(queryString: string, retries = 3, backoff = 10
   return null;
 }
 
+
+// Google Geocoding API (usado quando selecionado na área de Administrador)
+export async function queryGoogleGeocoding(queryString: string, apiKey: string): Promise<any> {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(queryString)}&region=br&key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.status !== 'OK' || !data.results?.length) {
+      if (data.status && data.status !== 'ZERO_RESULTS') {
+        console.warn(`Google Geocoding: ${data.status} ${data.error_message ?? ''}`);
+      }
+      return null;
+    }
+    const loc = data.results[0].geometry.location;
+    return [{ lat: loc.lat, lon: loc.lng }];
+  } catch (error) {
+    console.error('Google Geocoding query failed:', error);
+    return null;
+  }
+}
+
+// Resolve a consulta usando o provedor configurado, com fallback para o outro provedor
+export async function runGeocodingQuery(queryString: string): Promise<any> {
+  let provider = 'osm';
+  let googleKey: string | null = null;
+  try {
+    const settings = await fetchAppSettings();
+    provider = settings.geocoding_provider;
+    googleKey = settings.google_geocoding_api_key || settings.google_maps_api_key || null;
+  } catch (e) {
+    // segue com o provedor padrão
+  }
+
+  if (provider === 'google' && googleKey) {
+    const data = await queryGoogleGeocoding(queryString, googleKey);
+    if (data && data.length > 0) return data;
+  }
+
+  let data = await queryNominatim(queryString);
+  if (!data || data.length === 0) data = await queryPhoton(queryString);
+  return data;
+}
+
 export async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
   const cleanRua = rua?.trim() || null;
   const cleanBairro = bairro?.trim() || null;
@@ -105,14 +150,7 @@ export async function geocodeByAddress(rua?: string, bairro?: string, cidade: st
     let result: GeocodingResult | null = null;
 
     for (const query of tryQueries) {
-      // Primary: Nominatim
-      let data = await queryNominatim(query);
-      
-      // Secondary Fallback: Photon
-      if (!data || data.length === 0) {
-        console.log(`Nominatim failed for "${query}", trying Photon...`);
-        data = await queryPhoton(query);
-      }
+      const data = await runGeocodingQuery(query);
 
       if (data && data.length > 0) {
         result = {
@@ -180,16 +218,7 @@ export async function geocodeByCEP(cep: string): Promise<GeocodingResult | null>
     // Fallback: search just by CEP if address search failed
     if (!result) {
       // Try Nominatim by postalcode
-      const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanCEP}&country=Brazil&limit=1`;
-      const fallbackResponse = await fetch(fallbackUrl, {
-        headers: { 'User-Agent': 'HealthHeatmapApp/1.0' }
-      });
-      let fallbackData = await fallbackResponse.json();
-
-      // If Nominatim by CEP fails, try Photon by CEP
-      if (!fallbackData || fallbackData.length === 0) {
-        fallbackData = await queryPhoton(cleanCEP);
-      }
+      const fallbackData = await runGeocodingQuery(`${cleanCEP}, Brazil`);
 
       if (fallbackData && fallbackData.length > 0) {
         result = {

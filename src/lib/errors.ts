@@ -23,6 +23,8 @@ export type ErrorContext =
   | "geocode"
   | "save-panel"
   | "delete-panel"
+  | "load-settings"
+  | "save-settings"
   | "generic";
 
 const CONTEXT_TITLES: Record<ErrorContext, string> = {
@@ -34,6 +36,8 @@ const CONTEXT_TITLES: Record<ErrorContext, string> = {
   geocode: "Não foi possível geolocalizar o endereço",
   "save-panel": "Não foi possível salvar o painel",
   "delete-panel": "Não foi possível excluir o painel",
+  "load-settings": "Não foi possível carregar as configurações do administrador",
+  "save-settings": "Não foi possível salvar as configurações do administrador",
   generic: "Ocorreu um erro",
 };
 
