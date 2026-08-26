@@ -279,6 +279,48 @@ function Dashboard() {
   const mapsCount = 1 + comparisons.length;
   const gridCols = mapsCount === 1 ? "" : mapsCount === 2 ? "lg:grid-cols-2" : "lg:grid-cols-2 xl:grid-cols-3";
 
+  const topBairroOf = (list: HealthData[]) => {
+    const counts = list.reduce((acc: Record<string, number>, curr) => {
+      const b = curr.bairro || "Desconhecido";
+      acc[b] = (acc[b] || 0) + 1;
+      return acc;
+    }, {});
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return { name: top ? top[0] : "N/A", count: top ? top[1] : 0 };
+  };
+
+  const baseTop = topBairroOf(events);
+  const summaryRows: SummaryRow[] = [
+    {
+      label: "Período base",
+      range: formatRange(start1, end1),
+      count: totalEvents,
+      topBairro: baseTop.name,
+      topBairroCount: baseTop.count,
+      variation: null,
+    },
+    ...comparisons.map((c, i) => {
+      const cData = (comparisonQueries[i]?.data as HealthData[] | undefined) || [];
+      const t = topBairroOf(cData);
+      return {
+        label: `Comparação ${i + 1}`,
+        range: formatRange(c.start, c.end),
+        count: cData.length,
+        topBairro: t.name,
+        topBairroCount: t.count,
+        variation: totalEvents > 0 ? ((cData.length - totalEvents) / totalEvents) * 100 : null,
+      };
+    }),
+  ];
+
+  const planilhaLabel = config1 === "all" ? "Todas as Planilhas" : configs?.find((c) => c.id === config1)?.name || "—";
+
+  const handleExportPDF = () => {
+    const ok = exportComparisonsPDF(summaryRows, planilhaLabel);
+    if (!ok) toast.error("Permita pop-ups para gerar o PDF.");
+  };
+
+
   return (
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
