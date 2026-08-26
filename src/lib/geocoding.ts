@@ -117,7 +117,13 @@ export async function runGeocodingQuery(queryString: string): Promise<any> {
   return data;
 }
 
-export async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<GeocodingResult | null> {
+// CEPs genéricos (cidade inteira): ignorar e buscar por logradouro
+export const GENERIC_CEPS = new Set(["35790000"]);
+
+export async function geocodeByAddress(rua?: string, bairro?: string, _cidade?: string, _uf?: string): Promise<GeocodingResult | null> {
+  // Sempre buscar dentro de Curvelo - MG
+  const cidade = "Curvelo";
+  const uf = "MG";
   const cleanRua = rua?.trim() || null;
   const cleanBairro = bairro?.trim() || null;
 
