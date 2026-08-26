@@ -617,6 +617,14 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<SpreadsheetValidation | null>(null);
 
+  const { data: syncHistory } = useQuery({
+    queryKey: ["syncHistory", config?.id],
+    queryFn: () => fetchSyncHistory(config.id),
+    enabled: isOpen && !!config?.id,
+    refetchInterval: isOpen ? 5000 : false,
+  });
+
+
   useEffect(() => {
     if (config) {
       setLocalConfig({ ...config });
