@@ -375,6 +375,25 @@ function ConfigPage() {
         </CardContent>
       </Card>
 
+      {Object.keys(validations).length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            Validação Prévia das Planilhas
+          </h2>
+          {Object.entries(validations).map(([id, report]) => {
+            const cfg = configs?.find((c: any) => c.id === id);
+            return (
+              <div key={id} className="space-y-1">
+                <p className="text-sm font-medium">{cfg?.name ?? report.name ?? "Planilha"}</p>
+                <ValidationReport report={report} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+
       <ConfigDialog 
         isOpen={isDialogOpen} 
         onClose={() => setIsDialogOpen(false)} 
