@@ -7,8 +7,11 @@ import {
   deleteSpreadsheetConfig, 
   triggerManualSync, 
   fetchActiveJobs, 
-  fetchJobHistory 
+  fetchJobHistory,
+  validateSpreadsheet,
+  type SpreadsheetValidation
 } from "@/lib/data-service";
+import { ValidationReport } from "@/components/ValidationReport";
 import { 
   Card, 
   CardContent, 
@@ -32,7 +35,8 @@ import {
   Clock,
   Eye,
   Edit,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
@@ -68,6 +72,8 @@ function ConfigPage() {
   const [testBairro, setTestBairro] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState<string | null>(null);
+  const [validations, setValidations] = useState<Record<string, SpreadsheetValidation>>({});
   
   // Modal state
   const [selectedConfig, setSelectedConfig] = useState<any | null>(null);
@@ -134,9 +140,42 @@ function ConfigPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSync = async (id: string) => {
+  const handleValidate = async (config: any) => {
+    setIsValidating(config.id);
+    try {
+      const report = await validateSpreadsheet({ configId: config.id, url: config.url, name: config.name });
+      setValidations((prev) => ({ ...prev, [config.id]: report }));
+      if (report.ok && report.warnings.length === 0) {
+        toast.success("Planilha validada: estrutura e acesso corretos.");
+      } else if (report.ok) {
+        toast.warning(`Planilha válida, mas com ${report.warnings.length} alerta(s). Veja os detalhes abaixo da tabela.`);
+      } else {
+        toast.error("Planilha inválida. Veja os detalhes abaixo da tabela.");
+      }
+      return report;
+    } catch (e) {
+      toastError(e, "sync");
+      return null;
+    } finally {
+      setIsValidating(null);
+    }
+  };
+
+  const handleSync = async (config: any) => {
+    const id = config.id;
     setIsSyncing(id);
     try {
+      // Validação prévia: evita iniciar a sincronização quando a planilha está inacessível
+      // ou o cabeçalho não corresponde ao formato esperado.
+      const report = await validateSpreadsheet({ configId: id, url: config.url, name: config.name });
+      setValidations((prev) => ({ ...prev, [id]: report }));
+      if (!report.ok) {
+        toast.error("Sincronização cancelada: a planilha não passou na validação prévia.");
+        return;
+      }
+      if (report.warnings.length > 0) {
+        toast.warning(`Validação concluída com ${report.warnings.length} alerta(s). Sincronizando...`);
+      }
       await triggerManualSync(id);
       toast.success("Sincronização iniciada!");
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
@@ -289,9 +328,20 @@ function ConfigPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => handleSync(config.id)} 
+                          onClick={() => handleValidate(config)}
+                          disabled={isValidating === config.id || isSyncing === config.id}
+                          title="Validar planilha (cabeçalho, colunas e acesso)"
+                        >
+                          {isValidating === config.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <ShieldCheck className="w-4 h-4" />}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleSync(config)} 
                           disabled={isSyncing === config.id || isActiveJob}
-                          title="Sincronizar"
+                          title="Validar e sincronizar"
                         >
                           <RefreshCw className={`w-4 h-4 ${(isSyncing === config.id || isActiveJob) ? 'animate-spin' : ''}`} />
                         </Button>
@@ -324,6 +374,25 @@ function ConfigPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {Object.keys(validations).length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            Validação Prévia das Planilhas
+          </h2>
+          {Object.entries(validations).map(([id, report]) => {
+            const cfg = configs?.find((c: any) => c.id === id);
+            return (
+              <div key={id} className="space-y-1">
+                <p className="text-sm font-medium">{cfg?.name ?? report.name ?? "Planilha"}</p>
+                <ValidationReport report={report} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
 
       <ConfigDialog 
         isOpen={isDialogOpen} 
@@ -444,12 +513,34 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
   onSave: (config: any) => void;
 }) {
   const [localConfig, setLocalConfig] = useState<any>(null);
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState<SpreadsheetValidation | null>(null);
 
   useEffect(() => {
     if (config) {
       setLocalConfig({ ...config });
+      setValidation(null);
     }
   }, [config, isOpen]);
+
+  const runValidation = async () => {
+    if (!localConfig?.url) {
+      toast.error("Informe a URL da planilha antes de validar.");
+      return;
+    }
+    setValidating(true);
+    try {
+      const report = await validateSpreadsheet({ url: localConfig.url, name: localConfig.name });
+      setValidation(report);
+      if (report.ok && report.warnings.length === 0) toast.success("Planilha validada com sucesso.");
+      else if (report.ok) toast.warning("Planilha válida, com alertas.");
+      else toast.error("Planilha inválida.");
+    } catch (e) {
+      toastError(e, "sync");
+    } finally {
+      setValidating(false);
+    }
+  };
 
   if (!localConfig) return null;
 
@@ -533,7 +624,17 @@ function ConfigDialog({ isOpen, onClose, config, mode, onSave }: {
           </div>
         </div>
 
+        {validation && (
+          <div className="pb-2">
+            <ValidationReport report={validation} />
+          </div>
+        )}
+
         <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={runValidation} disabled={validating} className="gap-2">
+            {validating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+            Validar planilha
+          </Button>
           <Button variant="outline" onClick={onClose}>
             {isEdit ? "Cancelar" : "Fechar"}
           </Button>

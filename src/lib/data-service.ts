@@ -229,3 +229,34 @@ export async function deletePanel(id: string) {
 
 
 
+
+export interface SpreadsheetValidation {
+  ok: boolean;
+  name?: string | null;
+  url?: string | null;
+  accessible: boolean;
+  rowCount: number;
+  columnCount?: number;
+  detectedHeaders: Record<string, string>;
+  missingRequired?: string[];
+  sampleSize?: number;
+  errors: string[];
+  warnings: string[];
+}
+
+export async function validateSpreadsheet(params: { configId?: string; url?: string; name?: string }): Promise<SpreadsheetValidation> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || (import.meta as any).env['VITE_SUPABASE_PUBLISHABLE_KEY'];
+
+  const response = await fetch('/api/public/hooks/sync-spreadsheets?mode=validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Falha ao validar a planilha (HTTP ${response.status}). ${body.slice(0, 300)}`);
+  }
+  return (await response.json()) as SpreadsheetValidation;
+}

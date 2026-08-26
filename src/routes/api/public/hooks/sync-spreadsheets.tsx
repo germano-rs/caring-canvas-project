@@ -244,7 +244,154 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
         }
 
         const urlParams = new URL(request.url).searchParams;
-        const mode = urlParams.get('mode') || 'enqueue'; // enqueue or process
+        const mode = urlParams.get('mode') || 'enqueue'; // enqueue | process | validate
+
+        // ---------- Validação prévia da planilha (antes de sincronizar) ----------
+        if (mode === 'validate') {
+          let body: any = {};
+          try { body = await request.json(); } catch { body = {}; }
+
+          let targetUrl: string | null = body?.url ?? null;
+          let name: string | null = body?.name ?? null;
+
+          if (!targetUrl && body?.configId) {
+            const { data: cfg } = await supabase
+              .from('spreadsheet_configs')
+              .select('name, url')
+              .eq('id', body.configId)
+              .maybeSingle();
+            targetUrl = cfg?.url ?? null;
+            name = cfg?.name ?? name;
+          }
+
+          const report: any = {
+            ok: false,
+            name,
+            url: targetUrl,
+            accessible: false,
+            rowCount: 0,
+            detectedHeaders: {} as Record<string, string>,
+            errors: [] as string[],
+            warnings: [] as string[],
+          };
+
+          if (!targetUrl) {
+            report.errors.push('URL da planilha não informada.');
+            return Response.json(report, { status: 200 });
+          }
+
+          let url = targetUrl;
+          if (url.includes('docs.google.com/spreadsheets') && !url.includes('export?format=csv')) {
+            const match = url.match(/\/d\/([^\/]+)/);
+            if (match) {
+              url = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+            } else {
+              report.errors.push('Link do Google Sheets inválido: não foi possível identificar o ID do documento.');
+              return Response.json(report, { status: 200 });
+            }
+          }
+
+          let csvText = '';
+          try {
+            const res = await fetch(url, { redirect: 'follow' });
+            const contentType = res.headers.get('content-type') || '';
+            csvText = await res.text();
+
+            if (!res.ok) {
+              report.errors.push(
+                res.status === 404
+                  ? 'Planilha não encontrada (HTTP 404). Verifique se o link está correto.'
+                  : `A planilha não pôde ser acessada (HTTP ${res.status}).`
+              );
+              return Response.json(report, { status: 200 });
+            }
+
+            if (contentType.includes('text/html') || /<html/i.test(csvText.slice(0, 300))) {
+              report.errors.push(
+                'A planilha não está pública. Compartilhe como "Qualquer pessoa com o link — Leitor" e tente novamente.'
+              );
+              return Response.json(report, { status: 200 });
+            }
+            report.accessible = true;
+          } catch (e: any) {
+            report.errors.push(`Falha de rede ao acessar a planilha: ${e?.message ?? 'erro desconhecido'}`);
+            return Response.json(report, { status: 200 });
+          }
+
+          const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+          const rows = (parsed.data as any[]) ?? [];
+          const headerRow = (parsed.meta.fields ?? []) as string[];
+          report.rowCount = rows.length;
+          report.columnCount = headerRow.length;
+
+          if (headerRow.length === 0) {
+            report.errors.push('A planilha não possui linha de cabeçalho.');
+            return Response.json(report, { status: 200 });
+          }
+          if (rows.length === 0) {
+            report.errors.push('A planilha está vazia (nenhuma linha de dados após o cabeçalho).');
+          }
+
+          const maxIndex = Math.max(...Object.values(COLUMN_POSITIONS));
+          if (headerRow.length <= maxIndex) {
+            report.errors.push(
+              `A planilha tem apenas ${headerRow.length} colunas, mas o formato oficial exige pelo menos ${maxIndex + 1} (até a coluna ${indexToExcelLetter(maxIndex)}).`
+            );
+          }
+
+          const { headers, errors } = readHeaders(headerRow);
+          report.detectedHeaders = headers;
+
+          const REQUIRED: (keyof typeof COLUMN_POSITIONS)[] = [
+            'numeroNotificacao', 'dataNotificacao', 'bairro', 'logradouro', 'cep',
+          ];
+          const missingRequired = REQUIRED.filter(k => !headers[k]);
+          if (missingRequired.length > 0) {
+            report.errors.push(
+              `Colunas obrigatórias ausentes ou vazias no cabeçalho: ${missingRequired
+                .map(k => `${k} (${indexToExcelLetter(COLUMN_POSITIONS[k])})`)
+                .join(', ')}.`
+            );
+          }
+          report.missingRequired = missingRequired;
+
+          // Divergências de nome de cabeçalho: bloqueia se for coluna obrigatória, avisa nas demais
+          for (const msg of errors) {
+            const isRequiredIssue = REQUIRED.some(k => msg.startsWith(`Coluna ${indexToExcelLetter(COLUMN_POSITIONS[k])}:`));
+            if (isRequiredIssue) report.errors.push(msg);
+            else report.warnings.push(msg);
+          }
+
+          // Amostragem de qualidade dos dados (primeiras 100 linhas)
+          if (rows.length > 0 && missingRequired.length === 0) {
+            const sample = rows.slice(0, 100);
+            const counters = { cep: 0, logradouro: 0, bairro: 0, data: 0, dataInvalida: 0 };
+            for (const row of sample) {
+              if (!cell(row, headers['cep'])) counters.cep++;
+              if (!cell(row, headers['logradouro'])) counters.logradouro++;
+              if (!cell(row, headers['bairro'])) counters.bairro++;
+              const dataRaw = cell(row, headers['dataNotificacao']);
+              if (!dataRaw) counters.data++;
+              else if (!/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/.test(dataRaw) && isNaN(new Date(dataRaw).getTime())) {
+                counters.dataInvalida++;
+              }
+            }
+            report.sampleSize = sample.length;
+            report.sampleIssues = counters;
+            if (counters.cep > 0) report.warnings.push(`${counters.cep} de ${sample.length} linhas analisadas estão sem CEP (serão geolocalizadas por rua/bairro).`);
+            if (counters.logradouro > 0) report.warnings.push(`${counters.logradouro} de ${sample.length} linhas analisadas estão sem logradouro.`);
+            if (counters.bairro > 0) report.warnings.push(`${counters.bairro} de ${sample.length} linhas analisadas estão sem bairro.`);
+            if (counters.data > 0) report.warnings.push(`${counters.data} de ${sample.length} linhas analisadas estão sem data da notificação.`);
+            if (counters.dataInvalida > 0) report.warnings.push(`${counters.dataInvalida} de ${sample.length} linhas analisadas têm data em formato não reconhecido (use dd/mm/aaaa).`);
+            if (counters.cep === sample.length && counters.logradouro === sample.length) {
+              report.errors.push('Nenhuma linha analisada possui CEP nem logradouro: não será possível gerar o mapa de calor.');
+            }
+          }
+
+          report.ok = report.accessible && report.errors.length === 0;
+          return Response.json(report, { status: 200 });
+        }
+
 
         if (mode === 'enqueue') {
           // 1. Find all active spreadsheets
