@@ -206,6 +206,31 @@ function ConfigPage() {
     }
   };
 
+  const handleReset = async (config: any) => {
+    const id = config.id;
+    setIsResetting(id);
+    try {
+      const result = await resetSpreadsheet(id);
+      toast.success(`Reprocessamento concluído: ${result.totalImported} registro(s) reimportado(s).`);
+      queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
+      queryClient.invalidateQueries({ queryKey: ["activeJobs"] });
+      queryClient.invalidateQueries({ queryKey: ["jobHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["syncHistory", id] });
+    } catch (e) {
+      toastError(e, "sync");
+    } finally {
+      setIsResetting(null);
+      setResetTarget(null);
+    }
+  };
+
+  // Lock ativo (expira em 10 minutos, igual à regra do servidor)
+  const isLocked = (config: any) =>
+    !!config.sync_locked_at &&
+    Date.now() - new Date(config.sync_locked_at).getTime() < 10 * 60 * 1000;
+
+
+
   const handleTestGeocoding = async () => {
     if (!testCep && !testRua && !testBairro) {
       toast.error("Insira ao menos um CEP, Rua ou Bairro para testar");
