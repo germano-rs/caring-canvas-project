@@ -330,8 +330,10 @@ function ConfigPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {configs?.map((config) => {
+              {configs?.map((config: any) => {
                 const isActiveJob = activeJobs?.some((j: any) => j.spreadsheet_id === config.id);
+                const locked = isLocked(config);
+                const busy = isActiveJob || locked || isSyncing === config.id || isResetting === config.id;
                 return (
                   <TableRow key={config.id}>
                     <TableCell className="font-medium">{config.name}</TableCell>
@@ -349,6 +351,10 @@ function ConfigPage() {
                         <Badge variant="secondary" className="animate-pulse bg-primary/10 text-primary border-primary/20">
                           Sincronizando
                         </Badge>
+                      ) : locked ? (
+                        <Badge variant="secondary" className="gap-1 bg-amber-50 text-amber-700 border-amber-200">
+                          <Lock className="w-3 h-3" /> Bloqueada
+                        </Badge>
                       ) : (
                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                           Ativo
@@ -361,7 +367,7 @@ function ConfigPage() {
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleOpenDialog(config, "view")}
-                          title="Visualizar"
+                          title="Visualizar e ver histórico de execuções"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -388,11 +394,23 @@ function ConfigPage() {
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleSync(config)} 
-                          disabled={isSyncing === config.id || isActiveJob}
-                          title="Validar e sincronizar"
+                          disabled={busy}
+                          title={locked ? "Sincronização em andamento para esta planilha" : "Validar e sincronizar"}
                         >
-                          <RefreshCw className={`w-4 h-4 ${(isSyncing === config.id || isActiveJob) ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => setResetTarget(config)}
+                          disabled={busy}
+                          title="Reprocessar planilha do zero"
+                        >
+                          {isResetting === config.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <RotateCcw className="w-4 h-4" />}
+                        </Button>
+
                         <Button 
                           variant="ghost" 
                           size="icon" 
