@@ -107,8 +107,8 @@ function readHeaders(headerRow: any[]): { headers: Record<string, string>; error
   const latHeader = findCoordinateColumn(headerRow, LATITUDE_ALIASES);
   const lonHeader = findCoordinateColumn(headerRow, LONGITUDE_ALIASES);
   if (latHeader && lonHeader) {
-    headers.latitude = latHeader;
-    headers.longitude = lonHeader;
+    headers['latitude'] = latHeader;
+    headers['longitude'] = lonHeader;
   }
 
   return { headers, errors };
