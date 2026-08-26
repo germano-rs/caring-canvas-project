@@ -6,11 +6,11 @@ export type FriendlyError = {
   /** Explicação em linguagem clara do que aconteceu */
   message: string;
   /** O que o usuário pode fazer para resolver */
-  hint?: string;
+  hint?: string | undefined;
   /** Mensagem técnica original (para copiar/reportar) */
-  details?: string;
+  details?: string | undefined;
   /** Código técnico quando disponível */
-  code?: string;
+  code?: string | undefined;
 };
 
 /** Contexto opcional para deixar a mensagem mais específica */
