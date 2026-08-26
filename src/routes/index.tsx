@@ -464,6 +464,24 @@ function Dashboard() {
         </div>
       )}
 
+      {isComparisonMode && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => exportComparisonsCSV(summaryRows, planilhaLabel)}>
+              <Download className="w-4 h-4" />
+              Exportar CSV
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportPDF}>
+              <FileText className="w-4 h-4" />
+              Exportar PDF
+            </Button>
+          </div>
+          <ComparisonSummary rows={summaryRows} />
+        </div>
+      )}
+
+
+
       <div className={`grid grid-cols-1 ${gridCols} gap-6`}>
         <Card className="overflow-hidden border-none shadow-lg">
           <div className="p-4 bg-primary/5 border-b flex items-center justify-between">
