@@ -441,6 +441,28 @@ function EventsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!mapEvent} onOpenChange={(o) => !o && setMapEvent(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Local do registro</DialogTitle>
+            <DialogDescription>
+              {mapEvent
+                ? `${mapEvent.rua || "Logradouro não informado"} — ${mapEvent.bairro || "Bairro não informado"} · ${mapEvent.latitude?.toFixed(6)}, ${mapEvent.longitude?.toFixed(6)}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {mapEvent && (
+            <HealthMap
+              data={[mapEvent]}
+              heatmapPoints={[[mapEvent.latitude, mapEvent.longitude, 1]]}
+              showMarkers
+              center={[mapEvent.latitude, mapEvent.longitude]}
+              zoom={17}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
