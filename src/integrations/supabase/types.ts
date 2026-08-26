@@ -22,6 +22,7 @@ export type Database = {
           id: string
           latitude: number
           longitude: number
+          provider: string | null
           rua: string | null
           uf: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           latitude: number
           longitude: number
+          provider?: string | null
           rua?: string | null
           uf: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           id?: string
           latitude?: number
           longitude?: number
+          provider?: string | null
           rua?: string | null
           uf?: string
         }
@@ -81,6 +84,7 @@ export type Database = {
           created_at: string | null
           latitude: number
           longitude: number
+          provider: string | null
           rua: string | null
         }
         Insert: {
@@ -89,6 +93,7 @@ export type Database = {
           created_at?: string | null
           latitude: number
           longitude: number
+          provider?: string | null
           rua?: string | null
         }
         Update: {
@@ -97,6 +102,7 @@ export type Database = {
           created_at?: string | null
           latitude?: number
           longitude?: number
+          provider?: string | null
           rua?: string | null
         }
         Relationships: []
@@ -110,6 +116,8 @@ export type Database = {
           data_nascimento: string | null
           event_date: string
           event_type: string | null
+          geo_provider: string | null
+          geo_source: string | null
           gestante: string | null
           id: string
           id_unidade: string | null
@@ -133,6 +141,8 @@ export type Database = {
           data_nascimento?: string | null
           event_date: string
           event_type?: string | null
+          geo_provider?: string | null
+          geo_source?: string | null
           gestante?: string | null
           id?: string
           id_unidade?: string | null
@@ -156,6 +166,8 @@ export type Database = {
           data_nascimento?: string | null
           event_date?: string
           event_type?: string | null
+          geo_provider?: string | null
+          geo_source?: string | null
           gestante?: string | null
           id?: string
           id_unidade?: string | null
