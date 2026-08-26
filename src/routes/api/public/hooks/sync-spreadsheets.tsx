@@ -215,6 +215,7 @@ async function geocodeByAddress(rua?: string, bairro?: string, _cidade?: string,
 async function serverGeocodeByCEP(cep: string): Promise<(GeocodingResult & { provider: string }) | null> {
   const cleanCEP = cep.replace(/\D/g, "");
   if (cleanCEP.length !== 8) return null;
+  if (GENERIC_CEPS.has(cleanCEP)) return null;
   try {
     const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`);
     const viaCepData = await viaCepResponse.json();
