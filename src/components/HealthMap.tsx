@@ -11,8 +11,8 @@ interface HealthMapProps {
   data: any[];
   heatmapPoints: [number, number, number][];
   showMarkers?: boolean;
-  center?: [number, number];
-  zoom?: number;
+  center?: [number, number] | undefined;
+  zoom?: number | undefined;
 }
 
 function MapSwitcher({ data, heatmapPoints, showMarkers = false, center, zoom }: HealthMapProps) {

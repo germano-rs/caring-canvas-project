@@ -22,8 +22,8 @@ interface MapComponentProps {
   data: any[];
   heatmapPoints: [number, number, number][];
   showMarkers?: boolean;
-  center?: [number, number];
-  zoom?: number;
+  center?: [number, number] | undefined;
+  zoom?: number | undefined;
 }
 
 export default function MapComponent({ data, heatmapPoints, showMarkers = false, center, zoom }: MapComponentProps) {
