@@ -719,7 +719,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
                   // Prioridade 2: geocoding por CEP/endereço
                   if (!Number.isFinite(lat) && config.auto_geocode) {
                     let geo: any = null;
-                    if (cleanCEP.length === 8) {
+                    if (cleanCEP.length === 8 && !GENERIC_CEPS.has(cleanCEP)) {
                       const { data: cached } = await supabase.from('geocoding_cache').select('*').eq('cep', cleanCEP).maybeSingle();
                       if (cached) {
                         geo = cached;
