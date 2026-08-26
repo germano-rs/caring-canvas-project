@@ -185,7 +185,13 @@ async function runGeocodingQuery(queryString: string): Promise<{ data: any; prov
   return null;
 }
 
-async function geocodeByAddress(rua?: string, bairro?: string, cidade: string = "Curvelo", uf: string = "MG"): Promise<(GeocodingResult & { provider: string }) | null> {
+// CEPs genéricos (cidade inteira) que não devem ser usados para geocoding
+const GENERIC_CEPS = new Set(['35790000']);
+
+async function geocodeByAddress(rua?: string, bairro?: string, _cidade?: string, _uf?: string): Promise<(GeocodingResult & { provider: string }) | null> {
+  // Sempre buscar dentro de Curvelo - MG
+  const cidade = "Curvelo";
+  const uf = "MG";
   const tryQueries: string[] = [];
   if (rua && bairro) tryQueries.push(`${rua}, ${bairro}, ${cidade} - ${uf}, Brazil`);
   if (rua) tryQueries.push(`${rua}, ${cidade} - ${uf}, Brazil`);
