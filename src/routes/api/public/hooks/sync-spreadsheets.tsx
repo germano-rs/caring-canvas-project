@@ -523,7 +523,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-spreadsheets')({
 
               const itemsToEnqueue = newRows.map((row, i) => {
                 const absoluteIndex = lastRowCount + i;
-                const notif = cell(row, headers.numeroNotificacao) ?? '';
+                const notif = cell(row, headers['numeroNotificacao']) ?? '';
                 const key = `${config.id}|${notif}|${absoluteIndex}`;
                 return {
                   job_id: job.id,
