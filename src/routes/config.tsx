@@ -39,8 +39,21 @@ import {
   Eye,
   Edit,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  RotateCcw,
+  Lock,
+  AlertTriangle
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { geocodeByCEP, geocodeByAddress } from "@/lib/geocoding";
