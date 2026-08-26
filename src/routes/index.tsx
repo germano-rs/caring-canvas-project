@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
 import { toastError } from "../lib/errors";
 import { z } from "zod";
+import { ComparisonSummary, type SummaryRow } from "../components/ComparisonSummary";
+import { exportComparisonsCSV, exportComparisonsPDF } from "../lib/export-comparisons";
 
 const MAX_COMPARISONS = 5;
 const STORAGE_KEY = "dashboard-comparisons-v1";
