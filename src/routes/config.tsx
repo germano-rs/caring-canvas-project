@@ -54,6 +54,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { ErrorDisplay } from "@/components/ErrorDisplay";
+import { toastError, describeError } from "@/lib/errors";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -72,7 +74,7 @@ function ConfigPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
 
-  const { data: configs, isLoading } = useQuery({
+  const { data: configs, isLoading, error: configsError, refetch: refetchConfigs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
     queryFn: fetchSpreadsheetConfigs,
   });
@@ -99,8 +101,8 @@ function ConfigPage() {
       toast.success("Configuração salva com sucesso!");
       setIsDialogOpen(false);
     },
-    onError: (error: any) => {
-      toast.error(`Erro ao salvar: ${error.message}`);
+    onError: (error: unknown) => {
+      toastError(error, "save-config");
     },
   });
 
@@ -109,6 +111,9 @@ function ConfigPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
       toast.success("Planilha removida.");
+    },
+    onError: (error: unknown) => {
+      toastError(error, "delete-config");
     },
   });
 
@@ -137,7 +142,7 @@ function ConfigPage() {
       queryClient.invalidateQueries({ queryKey: ["spreadsheetConfigs"] });
       queryClient.invalidateQueries({ queryKey: ["activeJobs"] });
     } catch (e) {
-      toast.error("Falha ao iniciar sincronização.");
+      toastError(e, "sync");
     } finally {
       setIsSyncing(null);
     }
@@ -165,10 +170,15 @@ function ConfigPage() {
           `Localizado: Lat ${result.latitude.toFixed(4)}, Lon ${result.longitude.toFixed(4)} ${result.bairro ? `(${result.bairro})` : ""}`
         );
       } else {
-        toast.error("Não foi possível geolocalizar com os dados fornecidos.");
+        toastError(
+          new Error(
+            `Nenhuma coordenada encontrada para ${[testCep && `CEP ${testCep}`, testRua, testBairro].filter(Boolean).join(" / ")}.`
+          ),
+          "geocode"
+        );
       }
     } catch (error) {
-      toast.error("Erro ao testar geolocalização.");
+      toastError(error, "geocode");
     } finally {
       setIsTesting(false);
     }
@@ -190,6 +200,10 @@ function ConfigPage() {
           Adicionar Planilha
         </Button>
       </div>
+
+      {configsError && (
+        <ErrorDisplay error={configsError} context="load-configs" onRetry={() => refetchConfigs()} />
+      )}
 
       {activeJobs && activeJobs.length > 0 && (
         <div className="space-y-4">
@@ -358,6 +372,11 @@ function ConfigPage() {
                   )}
                 </div>
               </div>
+                {job.status === 'failed' && job.error && (
+                  <div className="px-3 pb-3 -mt-2">
+                    <ErrorDisplay error={new Error(job.error)} context="sync" />
+                  </div>
+                )}
             ))}
             {(!jobHistory || jobHistory.length === 0) && (
               <p className="text-center text-muted-foreground py-4">Nenhum histórico disponível.</p>
