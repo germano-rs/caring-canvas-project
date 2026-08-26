@@ -37,6 +37,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { HealthMap } from "@/components/HealthMap";
 
 export const Route = createFileRoute("/events")({
   component: EventsPage,
