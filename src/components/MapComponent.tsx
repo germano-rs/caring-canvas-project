@@ -22,14 +22,16 @@ interface MapComponentProps {
   data: any[];
   heatmapPoints: [number, number, number][];
   showMarkers?: boolean;
+  center?: [number, number];
+  zoom?: number;
 }
 
-export default function MapComponent({ data, heatmapPoints, showMarkers = false }: MapComponentProps) {
+export default function MapComponent({ data, heatmapPoints, showMarkers = false, center, zoom }: MapComponentProps) {
   return (
     <div className="h-[600px] w-full z-0 relative">
       <MapContainer
-        center={CURVELO_COORDS}
-        zoom={14}
+        center={center ?? CURVELO_COORDS}
+        zoom={zoom ?? 14}
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
       >

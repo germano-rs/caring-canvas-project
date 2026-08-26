@@ -11,9 +11,11 @@ interface HealthMapProps {
   data: any[];
   heatmapPoints: [number, number, number][];
   showMarkers?: boolean;
+  center?: [number, number];
+  zoom?: number;
 }
 
-function MapSwitcher({ data, heatmapPoints, showMarkers = false }: HealthMapProps) {
+function MapSwitcher({ data, heatmapPoints, showMarkers = false, center, zoom }: HealthMapProps) {
   const { data: settings, isLoading } = useQuery({
     queryKey: ["app-settings"],
     queryFn: () => fetchAppSettings(),
@@ -40,18 +42,20 @@ function MapSwitcher({ data, heatmapPoints, showMarkers = false }: HealthMapProp
       data={data}
       heatmapPoints={heatmapPoints}
       showMarkers={showMarkers}
+      center={center}
+      zoom={zoom}
       apiKey={resolved.google_maps_api_key!}
     />
   ) : (
-    <MapComponent data={data} heatmapPoints={heatmapPoints} showMarkers={showMarkers} />
+    <MapComponent data={data} heatmapPoints={heatmapPoints} showMarkers={showMarkers} center={center} zoom={zoom} />
   );
 }
 
-export function HealthMap({ data, heatmapPoints, showMarkers = false }: HealthMapProps) {
+export function HealthMap({ data, heatmapPoints, showMarkers = false, center, zoom }: HealthMapProps) {
   return (
     <ClientOnly fallback={<Skeleton className="h-[600px] w-full" />}>
       <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
-        <MapSwitcher data={data} heatmapPoints={heatmapPoints} showMarkers={showMarkers} />
+        <MapSwitcher data={data} heatmapPoints={heatmapPoints} showMarkers={showMarkers} center={center} zoom={zoom} />
       </Suspense>
     </ClientOnly>
   );
