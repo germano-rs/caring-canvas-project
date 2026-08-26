@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { fetchEventsFromDb, fetchSpreadsheetConfigs, reprocessEvent, type HealthData } from "@/lib/data-service";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  fetchEventsFromDb,
+  fetchSpreadsheetConfigs,
+  reprocessEvent,
+  fetchEventGeocodeHistory,
+  type HealthData,
+} from "@/lib/data-service";
 import { useState, useMemo } from "react";
 import {
   Table,
@@ -35,6 +41,7 @@ import {
   Download,
   Eraser,
   RefreshCw,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
@@ -146,7 +153,10 @@ function EventsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [mapEvent, setMapEvent] = useState<HealthData | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [historyEvent, setHistoryEvent] = useState<HealthData | null>(null);
   const itemsPerPage = 10;
+
+  const queryClient = useQueryClient();
 
   const { data: configs } = useQuery({
     queryKey: ["spreadsheetConfigs"],
@@ -170,12 +180,19 @@ function EventsPage() {
         toast.warning("Reprocessado, mas nenhuma coordenada foi encontrada para este registro.");
       }
       await refetchEvents();
+      await queryClient.invalidateQueries({ queryKey: ["eventGeocodeHistory", event.id] });
     } catch (err) {
       toastError(err, "generic");
     } finally {
       setReprocessingId(null);
     }
   };
+
+  const { data: history, isLoading: historyLoading } = useQuery({
+    queryKey: ["eventGeocodeHistory", historyEvent?.id],
+    queryFn: () => fetchEventGeocodeHistory(historyEvent!.id),
+    enabled: !!historyEvent,
+  });
 
   const setFilter = (key: ColumnKey, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -326,7 +343,7 @@ function EventsPage() {
                       </button>
                     </TableHead>
                   ))}
-                  <TableHead className="w-[110px] text-xs font-medium">Ações</TableHead>
+                  <TableHead className="w-[190px] text-xs font-medium">Ações</TableHead>
                 </TableRow>
                 <TableRow className="bg-muted/10 hover:bg-muted/10">
                   {COLUMNS.map((c) => (
@@ -445,6 +462,16 @@ function EventsPage() {
                             />
                             {reprocessingId === event.id ? "..." : "Reprocessar"}
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => setHistoryEvent(event)}
+                            title="Ver histórico de reprocessamentos"
+                          >
+                            <History className="h-3 w-3 mr-1" />
+                            Histórico
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -481,6 +508,85 @@ function EventsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!historyEvent} onOpenChange={(o) => !o && setHistoryEvent(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico de reprocessamentos</DialogTitle>
+            <DialogDescription>
+              {historyEvent
+                ? `Nº ${historyEvent.numero_notificacao || "---"} · ${historyEvent.rua || "Logradouro não informado"} — ${historyEvent.bairro || "Bairro não informado"}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {historyLoading ? (
+            <p className="text-sm text-muted-foreground italic">Carregando histórico...</p>
+          ) : !history || history.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">
+              Nenhum reprocessamento registrado para este registro ainda.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {history.map((h) => (
+                <div key={h.id} className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="text-xs font-medium">
+                      {new Date(h.created_at).toLocaleString("pt-BR")}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] h-5">
+                        {sourceLabel(h.geo_source) || "Sem origem"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] h-5">
+                        {providerLabel(h.geo_provider) || "Sem serviço"}
+                      </Badge>
+                      {h.location_found ? (
+                        <Badge variant="outline" className="text-[10px] h-5 bg-green-50 text-green-700 border-green-200">
+                          Encontrado
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-[10px] h-5">
+                          Não encontrado
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Endereço retornado: </span>
+                    {h.found_address || "---"}
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Coordenadas: </span>
+                    <code className="text-[10px]">
+                      {h.latitude != null && h.longitude != null
+                        ? `${h.latitude.toFixed(6)}, ${h.longitude.toFixed(6)}`
+                        : "---"}
+                    </code>
+                  </div>
+                  {h.error && (
+                    <div className="text-xs text-destructive">Erro: {h.error}</div>
+                  )}
+
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">Dados enviados (payload)</summary>
+                    <pre className="mt-1 max-h-52 overflow-auto rounded bg-muted p-2 text-[10px] whitespace-pre-wrap">
+                      {JSON.stringify(h.query_payload, null, 2)}
+                    </pre>
+                  </details>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">Retorno da API de geolocalização</summary>
+                    <pre className="mt-1 max-h-52 overflow-auto rounded bg-muted p-2 text-[10px] whitespace-pre-wrap">
+                      {JSON.stringify(h.api_response, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!mapEvent} onOpenChange={(o) => !o && setMapEvent(null)}>
         <DialogContent className="max-w-3xl">
