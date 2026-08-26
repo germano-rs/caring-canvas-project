@@ -5,7 +5,7 @@ import { type HealthData } from "../lib/data-service";
 import { HealthMap } from "../components/HealthMap";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
-import { MapPin, Calendar, Activity, Info, Columns, Filter, Save, X } from "lucide-react";
+import { MapPin, Calendar, Activity, Info, Columns, Filter, Save, X, Download, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Button } from "../components/ui/button";
@@ -17,8 +17,11 @@ import { toast } from "sonner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
 import { toastError } from "../lib/errors";
 import { z } from "zod";
+import { ComparisonSummary, type SummaryRow } from "../components/ComparisonSummary";
+import { exportComparisonsCSV, exportComparisonsPDF } from "../lib/export-comparisons";
 
 const MAX_COMPARISONS = 5;
+const STORAGE_KEY = "dashboard-comparisons-v1";
 
 type Period = { start: string; end: string };
 
@@ -67,11 +70,47 @@ function Dashboard() {
   const [draft, setDraft] = useState({ config: "all", start1: "", end1: "" });
   const [draftComparisons, setDraftComparisons] = useState<Period[]>([]);
 
+  const [restored, setRestored] = useState(false);
+
+  // Restaura filtros salvos no navegador (quando não estamos abrindo um painel salvo)
+  useEffect(() => {
+    if (panelId) {
+      setRestored(true);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        const list: Period[] = Array.isArray(s.comparisons) ? s.comparisons.slice(0, MAX_COMPARISONS) : [];
+        setConfig1(s.config || "all");
+        setStart1(s.start1 || "");
+        setEnd1(s.end1 || "");
+        setComparisons(list);
+        setDraft({ config: s.config || "all", start1: s.start1 || "", end1: s.end1 || "" });
+        setDraftComparisons(list);
+      }
+    } catch {
+      /* ignore */
+    }
+    setRestored(true);
+  }, [panelId]);
+
+  useEffect(() => {
+    if (!restored || panelId) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ config: config1, start1, end1, comparisons }));
+    } catch {
+      /* ignore */
+    }
+  }, [restored, panelId, config1, start1, end1, comparisons]);
+
   const { data: panelData, isLoading: isLoadingPanel } = useQuery({
     queryKey: ["savedPanel", panelId],
     queryFn: () => fetchSavedPanelById(panelId as string),
     enabled: !!panelId,
   });
+
 
   useEffect(() => {
     if (panelData) {
@@ -240,6 +279,48 @@ function Dashboard() {
   const mapsCount = 1 + comparisons.length;
   const gridCols = mapsCount === 1 ? "" : mapsCount === 2 ? "lg:grid-cols-2" : "lg:grid-cols-2 xl:grid-cols-3";
 
+  const topBairroOf = (list: HealthData[]) => {
+    const counts = list.reduce((acc: Record<string, number>, curr) => {
+      const b = curr.bairro || "Desconhecido";
+      acc[b] = (acc[b] || 0) + 1;
+      return acc;
+    }, {});
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return { name: top ? top[0] : "N/A", count: top ? top[1] : 0 };
+  };
+
+  const baseTop = topBairroOf(events);
+  const summaryRows: SummaryRow[] = [
+    {
+      label: "Período base",
+      range: formatRange(start1, end1),
+      count: totalEvents,
+      topBairro: baseTop.name,
+      topBairroCount: baseTop.count,
+      variation: null,
+    },
+    ...comparisons.map((c, i) => {
+      const cData = (comparisonQueries[i]?.data as HealthData[] | undefined) || [];
+      const t = topBairroOf(cData);
+      return {
+        label: `Comparação ${i + 1}`,
+        range: formatRange(c.start, c.end),
+        count: cData.length,
+        topBairro: t.name,
+        topBairroCount: t.count,
+        variation: totalEvents > 0 ? ((cData.length - totalEvents) / totalEvents) * 100 : null,
+      };
+    }),
+  ];
+
+  const planilhaLabel = config1 === "all" ? "Todas as Planilhas" : configs?.find((c) => c.id === config1)?.name || "—";
+
+  const handleExportPDF = () => {
+    const ok = exportComparisonsPDF(summaryRows, planilhaLabel);
+    if (!ok) toast.error("Permita pop-ups para gerar o PDF.");
+  };
+
+
   return (
     <div className="flex-1 overflow-auto p-4 md:p-8 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -382,6 +463,24 @@ function Dashboard() {
           </Card>
         </div>
       )}
+
+      {isComparisonMode && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => exportComparisonsCSV(summaryRows, planilhaLabel)}>
+              <Download className="w-4 h-4" />
+              Exportar CSV
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportPDF}>
+              <FileText className="w-4 h-4" />
+              Exportar PDF
+            </Button>
+          </div>
+          <ComparisonSummary rows={summaryRows} />
+        </div>
+      )}
+
+
 
       <div className={`grid grid-cols-1 ${gridCols} gap-6`}>
         <Card className="overflow-hidden border-none shadow-lg">
